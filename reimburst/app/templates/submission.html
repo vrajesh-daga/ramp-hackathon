@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% set nav = 'treasurer' if user.role == 'treasurer' else 'member' %}
+{% set label, color = STATUS_LABELS[sub.status] %}
+{% set is_treasurer = user.role == 'treasurer' %}
+{% block title %}#{{ sub.id }} · Reimburst{% endblock %}
+{% block content %}
+<p class="small muted"><a href="{{ '/treasurer' if is_treasurer else '/member' }}">← Back</a></p>
+<h1>Request #{{ sub.id }} <span class="badge b-{{ color }}">{{ label }}</span></h1>
+<p class="muted small">{{ sub.member_name }} · {{ sub.event_name }} ({{ sub.event_date }}, {{ sub.fund }} funds) · submitted {{ sub.created_at | when }}{% if sub.note %} · “{{ sub.note }}”{% endif %}</p>
+
+<div class="grid2 decision-first">
+  <section>
+    {% if receipt %}
+    <img class="receipt-img" src="/receipt/{{ receipt.id }}/image" alt="Receipt photo">
+    {% endif %}
+    {% if extraction %}
+    <details class="card" style="margin-top:12px">
+      <summary>What Claude read off the receipt</summary>
+      <p class="small">
+        <b>{{ extraction.merchant_name or 'Unknown merchant' }}</b>{% if extraction.merchant_city %}, {{ extraction.merchant_city }}{% endif %}<br>
+        Date: {{ extraction.purchase_date or '—' }} · Card: {{ ('•••• ' ~ extraction.card_last4) if extraction.card_last4 else '—' }}{% if extraction.payer_name %} · {{ extraction.payer_name }}{% endif %}<br>
+        Subtotal ${{ '%.2f' | format(extraction.subtotal) }} · Tax ${{ '%.2f' | format(extraction.tax) }}{% if extraction.tip %} · Tip ${{ '%.2f' | format(extraction.tip) }}{% endif %}{% if extraction.discounts %} · Discounts ${{ '%.2f' | format(extraction.discounts) }}{% endif %} · <b>Total ${{ '%.2f' | format(extraction.total) }}</b>
+      </p>
+    </details>
+    {% endif %}
+  </section>
+
+  <section class="stack">
+    {% if working %}
+    <div class="card decision">
+      <span class="spinner"></span> <b>Reading your receipt…</b>
+      <div class="muted small">This usually takes a few seconds. The page updates by itself.</div>
+    </div>
+    {% else %}
+    <div class="card decision {{ color }} stack">
+      {% if sub.status in ('approved', 'partially_approved', 'auto_approved', 'packeted') %}
+        <div class="big">{{ sub.approved_cents | money }}</div>
+        <div class="muted small">approved of {{ sub.requested_cents | money }}</div>
+      {% elif sub.status == 'in_review' and sub.recommended_cents is not none %}
+        <div class="big">{{ sub.recommended_cents | money }}</div>
+        <div class="muted small">looks covered, of {{ sub.requested_cents | money }} · waiting on the treasurer</div>
+      {% endif %}
+      <div>{{ sub.member_message }}</div>
+      {% if is_treasurer and sub.recommendation %}
+        <div class="small"><b>Recommendation:</b> {{ sub.recommendation }}</div>
+      {% endif %}
+      {% if sub.held_until %}<div class="small muted">Payout held until after {{ sub.held_until }} (no refunds before the event).</div>{% endif %}
+      {% if is_treasurer and sub.error %}<div class="flag"><b>Pipeline error</b>{{ sub.error }}</div>{% endif %}
+    </div>
+    {% endif %}
+
+    {% if findings and is_treasurer %}{# members see a neutral message, never fraud flags #}
+    <div class="stack">
+      {% for f in findings %}
+      <div class="flag"><b>{{ SIGNAL_LABELS.get(f.signal, f.signal) }}{% if is_treasurer and f.points %} · {{ f.points }} pts{% endif %}</b>{{ f.detail }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if lines %}
+    <div class="card scroll">
+      <table>
+        <tr><th>Item</th><th class="num">Amount</th><th>Decision</th></tr>
+        {% for l in lines %}
+        <tr class="{{ 'struck' if l.verdict == 'disallowed' }} {{ 'unclear' if l.verdict == 'unclear' }}">
+          <td class="desc"><span class="itemname">{{ l.description }}</span>{% if l.taxable %} <span class="muted small">T</span>{% endif %}
+            {% if l.verdict != 'allowed' %}<div class="reason">{{ l.reason }}{% if l.rule_id not in ('NONE',) %} · <span title="{{ rules.get(l.rule_id, '') }}">{{ l.rule_id }}</span>{% endif %}</div>{% endif %}
+          </td>
+          <td class="num">{{ l.amount_cents | money }}</td>
+          <td>
+            {% if l.verdict == 'allowed' %}<span class="badge b-green">Covered</span>
+            {% elif l.verdict == 'disallowed' %}<span class="badge b-red">Not covered</span>
+            {% else %}<span class="badge b-amber">Treasurer decides</span>{% endif %}
+            {% if is_treasurer %}<div class="reason">by {{ l.decided_by }}</div>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+    {% endif %}
+
+    {% if is_treasurer and sub.status not in ('received', 'processing', 'packeted') %}
+    <div class="card stack">
+      <b>Your decision</b>
+      {% if sub.status == 'error' %}
+      <form method="post" action="/s/{{ sub.id }}/decide"><input type="hidden" name="action" value="retry">
+        <button class="secondary" type="submit">Retry reading the receipt</button></form>
+      {% endif %}
+      <form method="post" action="/s/{{ sub.id }}/decide" class="stack">
+        <div>
+          <label for="note">Note to the member (needed to ask a question)</label>
+          <input id="note" type="text" name="note" maxlength="500" placeholder="optional">
+        </div>
+        <div class="actions">
+          {% if sub.recommended_cents %}
+          <button type="submit" name="action" value="approve">Approve {{ sub.recommended_cents | money }}</button>
+          {% endif %}
+          <button type="submit" name="action" value="ask" class="secondary">Ask for info</button>
+          <button type="submit" name="action" value="reject" class="danger">Reject</button>
+        </div>
+      </form>
+      <form method="post" action="/s/{{ sub.id }}/decide" class="actions">
+        <input type="hidden" name="action" value="override">
+        <div class="grow">
+          <label for="amount">Or approve a different amount</label>
+          <input id="amount" type="text" name="amount" inputmode="decimal" placeholder="e.g. 18.60" required>
+        </div>
+        <button type="submit" class="secondary">Approve amount</button>
+      </form>
+    </div>
+    {% endif %}
+
+    {% if not is_treasurer and sub.member_id == user.id and sub.status in ('needs_info', 'error') %}
+    <form class="card stack" method="post" action="/s/{{ sub.id }}/reply" enctype="multipart/form-data">
+      <b>Reply to your treasurer</b>
+      <div><label for="rfile">New photo (optional)</label><input id="rfile" type="file" name="file" accept="image/*"></div>
+      <div><label for="rnote">Note (optional)</label><input id="rnote" type="text" name="note" maxlength="500"></div>
+      <button type="submit">Send</button>
+    </form>
+    {% endif %}
+
+    {% if is_treasurer %}
+    <details class="card">
+      <summary>Audit trail ({{ audit | length }} events{% if cost %}, AI cost ${{ '%.4f' | format(cost) }}{% endif %})</summary>
+      <div class="scroll"><table class="audit">
+        <tr><th>When</th><th>Who</th><th>What</th><th>Status</th></tr>
+        {% for a in audit %}
+        <tr><td>{{ a.created_at | when }}</td><td>{{ a.actor }}</td>
+          <td>{{ a.action }}{% if a.detail and a.action != 'pipeline decision' %}<div class="reason">{{ a.detail }}</div>{% endif %}</td>
+          <td>{{ a.to_status or '' }}</td></tr>
+        {% endfor %}
+      </table></div>
+    </details>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+// Poll every 2 seconds and reload when the status changes.
+(function () {
+  const start = "{{ sub.status }}|{{ sub.updated_at }}";
+  setInterval(async () => {
+    try {
+      const r = await fetch("/api/s/{{ sub.id }}", { cache: "no-store" });
+      if (!r.ok) return;
+      const s = await r.json();
+      if (`${s.status}|${s.updated_at}` !== start) location.reload();
+    } catch (e) { /* offline for a moment; try again next tick */ }
+  }, 2000);
+})();
+</script>
+{% endblock %}

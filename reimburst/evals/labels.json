@@ -1,0 +1,57 @@
+[
+  {
+    "file": "samples/1_clean_supplies.jpg",
+    "fund": "MISC",
+    "merchant": "Cal Craft Supply",
+    "purchase_date": "2026-10-28",
+    "total": 28.05,
+    "expected_status": "auto_approved",
+    "expected_approved": 28.05,
+    "disallowed_keywords": []
+  },
+  {
+    "file": "samples/2_grocery_with_wine.jpg",
+    "fund": "MISC",
+    "merchant": "Bear Market Grocery",
+    "purchase_date": "2026-10-30",
+    "total": 38.4,
+    "expected_status": "in_review",
+    "expected_approved": 18.6,
+    "disallowed_keywords": [
+      "CAB SAUV"
+    ]
+  },
+  {
+    "file": "samples/2_grocery_with_wine.jpg",
+    "fund": "ABSA",
+    "merchant": "Bear Market Grocery",
+    "purchase_date": "2026-10-30",
+    "total": 38.4,
+    "expected_status": "in_review",
+    "expected_approved": 6.6,
+    "disallowed_keywords": [
+      "CAB SAUV",
+      "TORTILLA"
+    ]
+  },
+  {
+    "file": "samples/4_edited_total_TEST.jpg",
+    "fund": "MISC",
+    "merchant": "Southside Snacks",
+    "purchase_date": "2026-10-31",
+    "total": 83.74,
+    "expected_status": "in_review",
+    "expected_approved": 14.54,
+    "disallowed_keywords": []
+  },
+  {
+    "file": "samples/5_ai_marker.png",
+    "fund": "MISC",
+    "merchant": "Telegraph Print Shop",
+    "purchase_date": "2026-11-02",
+    "total": 44.1,
+    "expected_status": "in_review",
+    "expected_approved": 44.1,
+    "disallowed_keywords": []
+  }
+]

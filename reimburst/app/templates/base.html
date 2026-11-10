@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Reimburst{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div class="bar">
+    <a class="logo" href="/">Reimburst</a>
+    <nav>
+      <a href="/member" class="{{ 'on' if nav == 'member' }}">Submit</a>
+      {% if user.role == 'treasurer' %}
+      <a href="/treasurer" class="{{ 'on' if nav == 'treasurer' }}">Treasurer queue</a>
+      <a href="/packets" class="{{ 'on' if nav == 'packets' }}">CalLink packets</a>
+      {% endif %}
+    </nav>
+    <form action="/switch" method="get">
+      <select name="uid" onchange="this.form.submit()" aria-label="Viewing as">
+        {% for m in members %}
+        <option value="{{ m.id }}" {{ 'selected' if m.id == user.id }}>{{ m.name }} ({{ m.role }})</option>
+        {% endfor %}
+      </select>
+      <noscript><button>Switch</button></noscript>
+    </form>
+  </div>
+</header>
+{% if OFFLINE %}<div class="banner">Offline demo mode: no API calls, sample receipts only.</div>{% endif %}
+<main>
+{% block content %}{% endblock %}
+</main>
+{% block scripts %}{% endblock %}
+</body>
+</html>

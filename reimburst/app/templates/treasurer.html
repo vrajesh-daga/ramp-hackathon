@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% set nav = 'treasurer' %}
+{% block title %}Treasurer queue · Reimburst{% endblock %}
+{% block content %}
+<h1>Treasurer queue</h1>
+<div class="stats">
+  <div class="card stat"><div class="n">{{ stats.total }}</div><div class="l">requests</div></div>
+  <div class="card stat"><div class="n">{{ stats.auto }}</div><div class="l">auto-approved by the pipeline</div></div>
+  <div class="card stat"><div class="n">{{ stats.approved_cents | money }}</div><div class="l">approved so far</div></div>
+  <div class="card stat"><div class="n">${{ '%.2f' | format(cost.usd) }}</div><div class="l">Claude cost ({{ cost.calls }} calls)</div></div>
+</div>
+
+{% for title, rows in sections %}
+<h2>{{ title }} <span class="muted small">({{ rows | length }})</span></h2>
+<div class="card scroll">
+  {% if rows %}
+  <table>
+    <tr><th>#</th><th>Member</th><th>Event</th><th>Merchant</th><th>Status</th><th class="num">Risk</th><th class="num">Requested</th><th class="num">Payout</th></tr>
+    {% for s in rows %}
+    {% set label, color = STATUS_LABELS[s.status] %}
+    <tr class="rowlink" onclick="location.href='/s/{{ s.id }}'">
+      <td><a href="/s/{{ s.id }}">{{ s.id }}</a></td>
+      <td>{{ s.member_name }}</td>
+      <td>{{ s.event_name }}</td>
+      <td>{{ s.merchant or '—' }}</td>
+      <td><span class="badge b-{{ color }}">{{ label }}</span>{% if s.flags %} <span class="badge b-red">{{ s.flags }} flag{{ 's' if s.flags > 1 }}</span>{% endif %}</td>
+      <td class="num">{{ s.risk_score }}</td>
+      <td class="num">{{ s.requested_cents | money }}</td>
+      <td class="num">{{ (s.approved_cents if s.approved_cents is not none else s.recommended_cents) | money }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <div class="empty">Nothing here.</div>
+  {% endif %}
+</div>
+{% endfor %}
+{% endblock %}
+{% block scripts %}
+<script>
+// Refresh the queue when any request changes (polling stands in for live updates).
+(function () {
+  let version = null;
+  async function check() {
+    try {
+      const r = await fetch("/api/queue-version", { cache: "no-store" });
+      const { v } = await r.json();
+      if (version !== null && v !== version) location.reload();
+      version = v;
+    } catch (e) { /* try again next tick */ }
+  }
+  check();
+  setInterval(check, 2000);
+})();
+</script>
+{% endblock %}

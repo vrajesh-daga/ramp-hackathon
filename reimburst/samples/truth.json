@@ -1,0 +1,173 @@
+{
+  "008d2114468aa6f9117931ff0e3518855f1436c6de5d27a336a47da6bc4b6a65": {
+    "document_type": "itemized_receipt",
+    "merchant_name": "Cal Craft Supply",
+    "merchant_city": "Berkeley",
+    "purchase_date": "2026-10-28",
+    "payer_name": "Alex Kim",
+    "card_last4": "4821",
+    "line_items": [
+      {
+        "description": "POSTER BOARD 22X28 4@2.99",
+        "quantity": 4.0,
+        "amount": 11.96,
+        "taxable": true,
+        "category": "supplies"
+      },
+      {
+        "description": "MARKERS 12PK",
+        "quantity": 1.0,
+        "amount": 8.49,
+        "taxable": true,
+        "category": "supplies"
+      },
+      {
+        "description": "PACKING TAPE",
+        "quantity": 1.0,
+        "amount": 4.99,
+        "taxable": true,
+        "category": "supplies"
+      }
+    ],
+    "discounts": 0.0,
+    "subtotal": 25.44,
+    "tax": 2.61,
+    "tip": 0.0,
+    "total": 28.05,
+    "legible": true
+  },
+  "17ac66046d7eb6a0cd8d84fe4750f38f3865062e1d92683e3e392a453a86af07": {
+    "document_type": "itemized_receipt",
+    "merchant_name": "Bear Market Grocery",
+    "merchant_city": "Berkeley",
+    "purchase_date": "2026-10-30",
+    "payer_name": "Jordan Lee",
+    "card_last4": "7310",
+    "line_items": [
+      {
+        "description": "TORTILLA CHIPS 3@4.00",
+        "quantity": 3.0,
+        "amount": 12.0,
+        "taxable": false,
+        "category": "food"
+      },
+      {
+        "description": "PAPER PLATES 50CT",
+        "quantity": 1.0,
+        "amount": 6.0,
+        "taxable": true,
+        "category": "supplies"
+      },
+      {
+        "description": "CAB SAUV 750ML",
+        "quantity": 1.0,
+        "amount": 18.0,
+        "taxable": true,
+        "category": "alcohol"
+      }
+    ],
+    "discounts": 0.0,
+    "subtotal": 36.0,
+    "tax": 2.4,
+    "tip": 0.0,
+    "total": 38.4,
+    "legible": true
+  },
+  "8f056b31e1cfa382bc7268eedcd6f9b94e24a2424e44d77c890da2eba5dfbd35": {
+    "document_type": "itemized_receipt",
+    "merchant_name": "Southside Snacks",
+    "merchant_city": "Berkeley",
+    "purchase_date": "2026-10-31",
+    "payer_name": "Jordan Lee",
+    "card_last4": "7310",
+    "line_items": [
+      {
+        "description": "WATER 24PK",
+        "quantity": 1.0,
+        "amount": 5.99,
+        "taxable": false,
+        "category": "nonalcoholic_drink"
+      },
+      {
+        "description": "PARTY CUPS 50CT",
+        "quantity": 1.0,
+        "amount": 4.5,
+        "taxable": true,
+        "category": "supplies"
+      },
+      {
+        "description": "NAPKINS 200CT",
+        "quantity": 1.0,
+        "amount": 3.25,
+        "taxable": true,
+        "category": "supplies"
+      }
+    ],
+    "discounts": 0.0,
+    "subtotal": 13.74,
+    "tax": 0.8,
+    "tip": 0.0,
+    "total": 83.74,
+    "legible": true
+  },
+  "33a75b1eceff4c2d6187f357216901e0025bca16164e5394e26485ef605da469": {
+    "document_type": "itemized_receipt",
+    "merchant_name": "Telegraph Print Shop",
+    "merchant_city": "Berkeley",
+    "purchase_date": "2026-11-02",
+    "payer_name": "Alex Kim",
+    "card_last4": "4821",
+    "line_items": [
+      {
+        "description": "FLYERS COLOR 100CT",
+        "quantity": 1.0,
+        "amount": 40.0,
+        "taxable": true,
+        "category": "supplies"
+      }
+    ],
+    "discounts": 0.0,
+    "subtotal": 40.0,
+    "tax": 4.1,
+    "tip": 0.0,
+    "total": 44.1,
+    "legible": true
+  },
+  "8e85e0a7aebdb7edbb6ed39174bbd6f6186909612c0c947174ea248d71b13fb6": {
+    "document_type": "itemized_receipt",
+    "merchant_name": "Cal Craft Supply",
+    "merchant_city": "Berkeley",
+    "purchase_date": "2026-10-28",
+    "payer_name": "Alex Kim",
+    "card_last4": "4821",
+    "line_items": [
+      {
+        "description": "POSTER BOARD 22X28 4@2.99",
+        "quantity": 4.0,
+        "amount": 11.96,
+        "taxable": true,
+        "category": "supplies"
+      },
+      {
+        "description": "MARKERS 12PK",
+        "quantity": 1.0,
+        "amount": 8.49,
+        "taxable": true,
+        "category": "supplies"
+      },
+      {
+        "description": "PACKING TAPE",
+        "quantity": 1.0,
+        "amount": 4.99,
+        "taxable": true,
+        "category": "supplies"
+      }
+    ],
+    "discounts": 0.0,
+    "subtotal": 25.44,
+    "tax": 2.61,
+    "tip": 0.0,
+    "total": 28.05,
+    "legible": true
+  }
+}

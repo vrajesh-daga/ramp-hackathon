@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% set nav = 'member' %}
+{% block title %}Submit a receipt · Reimburst{% endblock %}
+{% block content %}
+<div class="grid2">
+  <section>
+    <h1>Get paid back</h1>
+    <form class="card stack" action="/submit" method="post" enctype="multipart/form-data">
+      <div>
+        <label for="event">What was it for?</label>
+        <select id="event" name="event_id" required>
+          {% for e in events %}
+          <option value="{{ e.id }}">{{ e.name }} · {{ e.event_date }} · {{ e.fund }} funds</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="file">Receipt photo</label>
+        <input id="file" type="file" name="file" accept="image/*" required>
+        <div class="muted small">Snap the whole receipt, flat, in good light.</div>
+      </div>
+      <div>
+        <label for="note">Note (optional)</label>
+        <input id="note" type="text" name="note" maxlength="500" placeholder="e.g. snacks for the mixer">
+      </div>
+      <button class="wide" type="submit">Submit receipt</button>
+    </form>
+  </section>
+  <section>
+    <h1>Your requests</h1>
+    <div class="card scroll">
+      {% if subs %}
+      <table>
+        <tr><th>#</th><th>Event</th><th>Status</th><th class="num">Requested</th><th class="num">Approved</th></tr>
+        {% for s in subs %}
+        {% set label, color = STATUS_LABELS[s.status] %}
+        <tr class="rowlink" onclick="location.href='/s/{{ s.id }}'">
+          <td><a href="/s/{{ s.id }}">{{ s.id }}</a></td>
+          <td>{{ s.event_name }}</td>
+          <td><span class="badge b-{{ color }}">{{ label }}</span></td>
+          <td class="num">{{ s.requested_cents | money }}</td>
+          <td class="num">{{ s.approved_cents | money }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+      {% else %}
+      <div class="empty">Nothing yet. Your submitted receipts will show up here.</div>
+      {% endif %}
+    </div>
+  </section>
+</div>
+{% endblock %}
