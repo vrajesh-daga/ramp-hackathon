@@ -8,6 +8,7 @@ on money.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import time
 from typing import Any
@@ -38,7 +39,9 @@ Rules:
   or "F"/"N" code column); false when it's marked non-taxable or unmarked.
 - category is your best guess at what the item is. Use "alcohol" for beer, wine,
   spirits and hard seltzer; "gift_card" for gift or prepaid cards; "personal" for
-  items for one person's own use (clothing, toiletries, a personal phone case).
+  items for one person's own use (clothing, toiletries, a personal phone case);
+  "travel" for gas or fuel, EV charging, parking, tolls, rideshares and transit
+  fares. Gas or fuel is always "travel", never "personal".
 - discounts: receipt-level discounts as one positive number, 0 if none.
 - subtotal, tax, tip, total: as printed; 0 if a field isn't printed (total is
   always printed on a real receipt).
@@ -53,6 +56,10 @@ the club's funding rules. For each line, decide:
 - "unclear" with rule_id "GAP" when you can't tell what the item is, or no rule
   clearly covers a doubtful item. A treasurer will decide those.
 
+Gas or fuel for driving to or from a club event is covered: mark it "allowed"
+with rule_id "NONE" unless one of the listed rules applies to it (for example,
+a travel rule for this event's fund).
+
 Only cite rules from the list. Judge the item, not the person: reasons should
 be one short, neutral sentence a student would find fair (say what the rule
 is, never accuse). member_summary: one or two friendly sentences telling the
@@ -60,6 +67,12 @@ member what will be covered."""
 
 
 # ---------- cache and offline answers -------------------------------------------
+
+def _prompt_version(system: str) -> str:
+    """Short fingerprint of a system prompt. It's part of every cache key, so
+    editing a prompt automatically ignores answers saved under the old one."""
+    return hashlib.sha256(system.encode()).hexdigest()[:8]
+
 
 def _cache_path(kind: str, key: str):
     return CACHE_DIR / f"{kind}_{key}.json"
@@ -165,7 +178,7 @@ def _call(purpose: str, system: str, content: list[dict], schema: dict,
 
 def extract(jpeg_bytes: bytes, original_sha: str, submission_id: int | None = None) -> tuple[ReceiptExtraction, str]:
     """Read the receipt. Returns (extraction, source) where source is api/cache/offline."""
-    key = f"{MODEL}_{original_sha}"
+    key = f"{MODEL}_{_prompt_version(EXTRACT_SYSTEM)}_{original_sha}"
     raw = _cache_get("extract", key)
     source = "cache"
     if raw is None and OFFLINE:
@@ -200,7 +213,7 @@ def judge(extraction: ReceiptExtraction, event: dict, rules: list[dict], rules_v
     Returns (None, 'offline') in offline mode; the caller then uses the
     deterministic rule backstop alone.
     """
-    key = f"{MODEL}_{original_sha}_{event['fund']}_{rules_version}"
+    key = f"{MODEL}_{_prompt_version(JUDGE_SYSTEM)}_{original_sha}_{event['fund']}_{rules_version}"
     raw = _cache_get("judge", key)
     if raw is not None:
         _log_call(submission_id, "judge", "cache")
