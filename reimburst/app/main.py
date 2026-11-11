@@ -17,8 +17,10 @@ from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from . import db
+from . import auditor, db
 from .config import MAX_UPLOAD_BYTES, MODEL, OFFLINE, UPLOAD_DIR
 from .imaging import sha256_bytes
 from .packets import build_packet, ready_for_packet
@@ -72,6 +74,27 @@ def _when(iso: str | None) -> str:
         return iso
 
 
+@app.exception_handler(StarletteHTTPException)
+async def friendly_errors(request: Request, exc: StarletteHTTPException):
+    """Show errors on the page, not as raw JSON.
+
+    A rejected form (a question with no note, an amount that's too high) sends
+    you back to the page you came from with the message in a red banner. A bad
+    page address shows a simple error page. The /api endpoints still answer JSON.
+    """
+    message = exc.detail if isinstance(exc.detail, str) else "Something went wrong."
+    wants_html = "text/html" in request.headers.get("accept", "")
+    if request.url.path.startswith("/api") or not wants_html:
+        return JSONResponse({"detail": message}, status_code=exc.status_code)
+    back = request.headers.get("referer", "")
+    if request.method == "POST" and back:
+        parts = urlsplit(back)
+        query = [(k, v) for k, v in parse_qsl(parts.query) if k != "error"] + [("error", message)]
+        return RedirectResponse(urlunsplit(parts._replace(query=urlencode(query), fragment="")), status_code=303)
+    return templates.TemplateResponse(request, "error.html", {"message": message, "code": exc.status_code},
+                                      status_code=exc.status_code)
+
+
 templates.env.filters["money"] = fmt
 templates.env.filters["when"] = _when
 templates.env.globals.update(STATUS_LABELS=STATUS_LABELS, SIGNAL_LABELS=SIGNAL_LABELS,
@@ -111,7 +134,7 @@ def load_submission(sid: int) -> dict:
 def parse_dollars(text: str) -> int:
     cleaned = re.sub(r"[^0-9.]", "", text or "")
     if not re.fullmatch(r"\d+(\.\d{1,2})?", cleaned):
-        raise HTTPException(400, "Enter an amount like 18.60")
+        raise HTTPException(400, "Enter the amount as a number, like 18.60.")
     whole, _, frac = cleaned.partition(".")
     return int(whole) * 100 + int((frac + "00")[:2])
 
@@ -206,9 +229,41 @@ def submission_page(request: Request, sid: int):
     if receipt and receipt["extraction_json"]:
         extraction = json.loads(receipt["extraction_json"])
     rules = {r["rule_id"]: r["text"] for r in db.all_rows("SELECT rule_id, text FROM policy_rules")}
+    case = None
+    if user["role"] == "treasurer":
+        case = db.one("SELECT * FROM case_notes WHERE submission_id = ? ORDER BY id DESC LIMIT 1", (sid,))
+        if case:
+            case["steps"] = json.loads(case["steps_json"])
+            case["evidence"] = json.loads(case["evidence_json"])
     return render(request, "submission.html", sub=sub, receipt=receipt, lines=lines, findings=findings,
-                  audit=audit, cost=cost, extraction=extraction, rules=rules,
-                  working=sub["status"] in WORKING)
+                  audit=audit, cost=cost, extraction=extraction, rules=rules, case=case,
+                  working=sub["status"] in WORKING, auditor_uses_claude=auditor.use_claude(),
+                  ACTION_LABELS=auditor.ACTION_LABELS)
+
+
+@app.post("/s/{sid}/investigate")
+def investigate(request: Request, sid: int, background: BackgroundTasks):
+    """Start the auditor agent on a request. It runs in the background; the page shows its steps live."""
+    user = current_user(request)
+    if user["role"] != "treasurer":
+        raise HTTPException(403, "Only the treasurer can run the auditor.")
+    sub = load_submission(sid)
+    if sub["status"] in WORKING:
+        raise HTTPException(400, "Wait until the receipt has been read.")
+    running = db.one("SELECT id FROM case_notes WHERE submission_id = ? AND status = 'running'", (sid,))
+    if running is None:
+        case_id = auditor.start_case(sid)
+        background.add_task(auditor.investigate, case_id, sid)
+    return RedirectResponse(f"/s/{sid}#auditor", status_code=303)
+
+
+@app.get("/api/s/{sid}/case")
+def api_case(sid: int):
+    c = db.one("SELECT id, status, steps_json FROM case_notes WHERE submission_id = ? ORDER BY id DESC LIMIT 1", (sid,))
+    if c is None:
+        return JSONResponse({"status": "none", "steps": []})
+    return JSONResponse({"id": c["id"], "status": c["status"],
+                         "steps": [st["summary"] for st in json.loads(c["steps_json"])]})
 
 
 @app.get("/receipt/{rid}/image")
@@ -279,7 +334,7 @@ def treasurer_decide(request: Request, sid: int, background: BackgroundTasks, ac
                           approved_cents=cents, member_message=message, treasurer_note=note)
         elif action == "ask":
             if not note:
-                raise HTTPException(400, "Write the question for the member.")
+                raise HTTPException(400, "Type your question in the note box first, then click Ask a question.")
             db.set_status(conn, sid, "needs_info", user["name"], "asked for info", note,
                           member_message=f"Your treasurer asked: {note}", treasurer_note=note)
         elif action == "reject":
@@ -298,6 +353,8 @@ def treasurer_decide(request: Request, sid: int, background: BackgroundTasks, ac
 @app.get("/treasurer")
 def treasurer(request: Request):
     user = current_user(request)
+    if user["role"] != "treasurer":  # members never see the queue, flags or other people's amounts
+        return RedirectResponse("/member", status_code=303)
     base = """SELECT s.*, m.name AS member_name, e.name AS event_name, r.merchant,
                      (SELECT COUNT(*) FROM findings f WHERE f.submission_id = s.id AND f.points > 0) AS flags
               FROM submissions s JOIN members m ON m.id = s.member_id JOIN events e ON e.id = s.event_id
@@ -329,6 +386,8 @@ def treasurer(request: Request):
 @app.get("/packets")
 def packets_page(request: Request):
     user = current_user(request)
+    if user["role"] != "treasurer":  # members never see the queue, flags or other people's amounts
+        return RedirectResponse("/member", status_code=303)
     ready = ready_for_packet(user["club_id"])
     held = db.all_rows(
         """SELECT s.id, s.held_until, s.approved_cents, m.name AS member_name FROM submissions s

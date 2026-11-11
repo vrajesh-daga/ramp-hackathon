@@ -38,7 +38,7 @@ Run `python scripts/seed.py --reset` first, then upload these files from `sample
 | 4 | Jordan Lee | `4_edited_total_TEST.jpg` | "Doesn't add up": the items support $14.54, but the printed total says $83.74. |
 | 5 | Alex Kim | `5_ai_marker.png` | Held: the file's metadata says it was made by a generative AI tool. |
 
-Then switch to **Sam Patel (treasurer)**. The queue is sorted by risk, and each flag explains itself. Approve #2, reject #3, then open **CalLink packets** and build the PDF. Every action shows up in the request's audit trail.
+Then switch to **Sam Patel (treasurer)**. The queue is sorted by risk, and each flag explains itself. Open #3 and click **Investigate this request**: the auditor agent checks similar receipts, Jordan's history, the event budget and both photos while you watch, then suggests rejecting #3 because it's the same purchase as #1. Approve #2, reject #3, then open **CalLink packets** and build the PDF. Every action shows up in the request's history.
 
 Try the **Build Night Workshop** event too: it's paid from ABSA funds, so food gets struck under ABSA-FOOD. **Spring Showcase** hasn't happened yet, so its approvals wait for the event date before they can go into a packet.
 
@@ -57,6 +57,14 @@ upload ─► prep ─► Claude reads ─► code checks math ─► Claude + f
 - **Code gets the last word on money** (`app/policy.py`): the receipt's math is reconciled in integer cents, and the approvable amount is computed in code. A fixed rule backstop strikes alcohol, gift cards and personal items (and food on ABSA funds) even if the model allowed them.
 - **Fraud signals** (`app/pipeline.py`): exact duplicate (file hash), same purchase (merchant + date + total, which catches re-photos), AI-tool metadata, and math that doesn't add up (which also catches an edited total). Each signal is worth points. 50 or more holds the request; any flag or struck line sends it to the treasurer.
 - **Members never see fraud flags.** They see a neutral "your treasurer will take a look" message. Only the treasurer can reject.
+
+## Auditor agent
+
+On any request, the treasurer can click **Investigate this request**. An agent investigates the case and writes a case note with a suggested action (approve, approve part, ask the member, or reject) plus the evidence behind it. The page shows each step as it happens.
+
+- **With an API key**, it's Claude using **tool use** through the Anthropic SDK's **Tool Runner** (`client.beta.messages.tool_runner`, in `app/auditor.py`). Claude gets seven read-only tools and decides for itself which to call and in what order: `get_submission`, `find_similar_receipts` (searches every club), `get_member_history`, `get_event_budget`, `get_rule`, `view_receipt` (returns the photo, so Claude can compare two receipts by eye), and `write_case_note` to finish. It's capped at 10 turns and costs a few cents per investigation, all logged.
+- **Without an API key** (or in offline mode), a rule-based investigator calls the same tools in a fixed order and writes the note from templates, so the feature works in every demo.
+- **The agent can only read.** It can't approve, reject or pay anything, and the treasurer always decides. Its notes and every step are saved in the `case_notes` table and the request's history.
 
 ## Evals (backend experimentation, not a product feature)
 
@@ -79,6 +87,7 @@ app/
   ai.py          the two Claude calls, cache, offline mode, cost logging
   policy.py      reconcile, rule backstop, partial-approval math, routing
   imaging.py     HEIC/rotation/resize, file hash, AI-marker scan
+  auditor.py     auditor agent: Claude tool use via the Tool Runner, plus a no-key fallback
   packets.py     CalLink packet PDF (ReportLab)
   schemas.py     extraction and judgment schemas
   db.py          SQLite schema and helpers (money stored as integer cents)

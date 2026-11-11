@@ -1,42 +1,47 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
 {% set nav = 'packets' %}
 {% block title %}CalLink packets · Reimburst{% endblock %}
 {% block content %}
 <h1>CalLink packets</h1>
-<div class="card stack">
-  <div>
-    <b>{{ ready | length }} approved request{{ '' if ready | length == 1 else 's' }} ready to file</b>
-    {% if ready %}· {{ ready | sum(attribute='approved_cents') | money }} total, grouped six per purchase request{% endif %}
-  </div>
+<p class="lede">Approved requests become one PDF, grouped six per purchase request, ready to upload to CalLink.</p>
+
+<div class="panel stack">
   {% if ready %}
-  <div class="scroll"><table>
-    <tr><th>#</th><th>Member</th><th>Event</th><th>Merchant</th><th class="num">Approved</th></tr>
-    {% for s in ready %}
-    <tr><td><a href="/s/{{ s.id }}">{{ s.id }}</a></td><td>{{ s.member_name }}</td><td>{{ s.event_name }}</td>
-      <td>{{ s.merchant or '—' }}</td><td class="num">{{ s.approved_cents | money }}</td></tr>
-    {% endfor %}
-  </table></div>
-  <form method="post" action="/packets/build"><button type="submit">Build CalLink packet PDF</button></form>
+  <h2 style="margin: 0">{{ ready | length }} approved request{{ '' if ready | length == 1 else 's' }} ready to file, {{ ready | sum(attribute='approved_cents') | money }} in total</h2>
+  <div class="table-wrap">
+    <table>
+      <tr><th>Request</th><th>Member</th><th class="hide-sm">Merchant</th><th class="num">Approved</th></tr>
+      {% for s in ready %}
+      <tr><td><a class="rowlink" href="/s/{{ s.id }}">{{ s.event_name }}</a><div class="quiet">Request {{ s.id }}</div></td>
+        <td>{{ s.member_name }}</td><td class="hide-sm">{{ s.merchant or 'Not read' }}</td>
+        <td class="num"><strong>{{ s.approved_cents | money }}</strong></td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  <form method="post" action="/packets/build"><button class="btn" type="submit">Build the CalLink PDF</button></form>
+  {% else %}
+  <p class="empty" style="padding: 0">Nothing is ready to file. Approved requests land here once their event has happened.</p>
   {% endif %}
   {% if held %}
-  <div class="muted small">{{ held | length }} more approved request{{ '' if held | length == 1 else 's' }} will be ready after {{ 'their events' if held | length > 1 else 'its event' }}:
-    {% for h in held %}#{{ h.id }} ({{ h.held_until }}){{ ', ' if not loop.last }}{% endfor %}.</div>
+  <p class="quiet" style="margin: 0">{{ held | length }} more approved request{{ '' if held | length == 1 else 's' }} will be ready after the event:
+    {% for h in held %}request {{ h.id }} on {{ ui.day(h.held_until) }}{{ ', ' if not loop.last }}{% endfor %}.</p>
   {% endif %}
 </div>
 
-<h2>Built packets</h2>
-<div class="card scroll">
+<div class="section-head"><h2>Built packets</h2><span class="count">{{ packets | length }}</span></div>
+<div class="table-wrap">
   {% if packets %}
   <table>
-    <tr><th>Packet</th><th>Created</th><th class="num">Requests</th><th class="num">Receipts</th><th class="num">Total</th><th></th></tr>
+    <tr><th>Packet</th><th>Built</th><th class="num hide-sm">Purchase requests</th><th class="num">Receipts</th><th class="num">Total</th><th></th></tr>
     {% for p in packets %}
-    <tr><td>#{{ p.id }}</td><td>{{ p.created_at | when }}</td><td class="num">{{ p.request_count }}</td>
+    <tr><td><strong>Packet {{ p.id }}</strong></td><td>{{ p.created_at | when }}</td><td class="num hide-sm">{{ p.request_count }}</td>
       <td class="num">{{ p.item_count }}</td><td class="num">{{ p.total_cents | money }}</td>
-      <td><a class="button secondary" href="/packets/{{ p.id }}/download">Download PDF</a></td></tr>
+      <td class="num"><a class="btn btn-ghost" href="/packets/{{ p.id }}/download">Download PDF</a></td></tr>
     {% endfor %}
   </table>
   {% else %}
-  <div class="empty">No packets yet.</div>
+  <p class="empty">No packets built yet.</p>
   {% endif %}
 </div>
 {% endblock %}

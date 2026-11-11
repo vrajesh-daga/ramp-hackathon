@@ -1,135 +1,195 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
 {% set nav = 'treasurer' if user.role == 'treasurer' else 'member' %}
 {% set label, color = STATUS_LABELS[sub.status] %}
 {% set is_treasurer = user.role == 'treasurer' %}
-{% block title %}#{{ sub.id }} · Reimburst{% endblock %}
+{% set final = sub.status in ('approved', 'partially_approved', 'auto_approved', 'packeted') %}
+{% set shown_cents = sub.approved_cents if final else (sub.recommended_cents if sub.status == 'in_review' else none) %}
+{% block title %}Request {{ sub.id }} · Reimburst{% endblock %}
 {% block content %}
-<p class="small muted"><a href="{{ '/treasurer' if is_treasurer else '/member' }}">← Back</a></p>
-<h1>Request #{{ sub.id }} <span class="badge b-{{ color }}">{{ label }}</span></h1>
-<p class="muted small">{{ sub.member_name }} · {{ sub.event_name }} ({{ sub.event_date }}, {{ sub.fund }} funds) · submitted {{ sub.created_at | when }}{% if sub.note %} · “{{ sub.note }}”{% endif %}</p>
+<a class="back" href="{{ '/treasurer' if is_treasurer else '/member' }}">Back to {{ 'the review queue' if is_treasurer else 'your requests' }}</a>
+<h1>{{ sub.event_name }}</h1>
+<p class="lede">Request {{ sub.id }} from {{ sub.member_name }}, sent {{ sub.created_at | when }}. {{ ui.fund(sub.fund) }}, event on {{ ui.day(sub.event_date) }}.{% if sub.note %} Note: “{{ sub.note }}”{% endif %}</p>
 
-<div class="grid2 decision-first">
+<div class="split">
   <section>
     {% if receipt %}
-    <img class="receipt-img" src="/receipt/{{ receipt.id }}/image" alt="Receipt photo">
+    <img class="photo" src="/receipt/{{ receipt.id }}/image" alt="Photo of the submitted receipt">
     {% endif %}
     {% if extraction %}
-    <details class="card" style="margin-top:12px">
+    <details class="panel" style="margin-top: 16px">
       <summary>What Claude read off the receipt</summary>
-      <p class="small">
-        <b>{{ extraction.merchant_name or 'Unknown merchant' }}</b>{% if extraction.merchant_city %}, {{ extraction.merchant_city }}{% endif %}<br>
-        Date: {{ extraction.purchase_date or '—' }} · Card: {{ ('•••• ' ~ extraction.card_last4) if extraction.card_last4 else '—' }}{% if extraction.payer_name %} · {{ extraction.payer_name }}{% endif %}<br>
-        Subtotal ${{ '%.2f' | format(extraction.subtotal) }} · Tax ${{ '%.2f' | format(extraction.tax) }}{% if extraction.tip %} · Tip ${{ '%.2f' | format(extraction.tip) }}{% endif %}{% if extraction.discounts %} · Discounts ${{ '%.2f' | format(extraction.discounts) }}{% endif %} · <b>Total ${{ '%.2f' | format(extraction.total) }}</b>
-      </p>
+      <dl class="facts">
+        <dt>Merchant</dt><dd>{{ extraction.merchant_name or 'Not readable' }}{% if extraction.merchant_city %}, {{ extraction.merchant_city }}{% endif %}</dd>
+        <dt>Date</dt><dd>{{ ui.day(extraction.purchase_date) or 'Not readable' }}</dd>
+        {% if extraction.card_last4 %}<dt>Card</dt><dd>ending {{ extraction.card_last4 }}{% if extraction.payer_name %}, {{ extraction.payer_name }}{% endif %}</dd>{% endif %}
+        <dt>Subtotal</dt><dd>${{ '%.2f' | format(extraction.subtotal) }}</dd>
+        <dt>Tax</dt><dd>${{ '%.2f' | format(extraction.tax) }}</dd>
+        {% if extraction.tip %}<dt>Tip</dt><dd>${{ '%.2f' | format(extraction.tip) }}</dd>{% endif %}
+        {% if extraction.discounts %}<dt>Discounts</dt><dd>${{ '%.2f' | format(extraction.discounts) }}</dd>{% endif %}
+        <dt>Total</dt><dd><strong>${{ '%.2f' | format(extraction.total) }}</strong></dd>
+      </dl>
     </details>
     {% endif %}
   </section>
 
-  <section class="stack">
+  <section class="verdict-col stack">
     {% if working %}
-    <div class="card decision">
-      <span class="spinner"></span> <b>Reading your receipt…</b>
-      <div class="muted small">This usually takes a few seconds. The page updates by itself.</div>
+    <div class="slip">
+      <div class="working"><span class="spinner" aria-hidden="true"></span>
+        <div><strong>Reading the receipt</strong><div class="quiet">Usually a few seconds. This page updates on its own.</div></div>
+      </div>
     </div>
     {% else %}
-    <div class="card decision {{ color }} stack">
-      {% if sub.status in ('approved', 'partially_approved', 'auto_approved', 'packeted') %}
-        <div class="big">{{ sub.approved_cents | money }}</div>
-        <div class="muted small">approved of {{ sub.requested_cents | money }}</div>
-      {% elif sub.status == 'in_review' and sub.recommended_cents is not none %}
-        <div class="big">{{ sub.recommended_cents | money }}</div>
-        <div class="muted small">looks covered, of {{ sub.requested_cents | money }} · waiting on the treasurer</div>
+    <div class="slip">
+      <div class="slip-top">
+        <div>
+          {% if shown_cents is not none %}
+          <div class="amount">{{ shown_cents | money }}</div>
+          <div class="amount-note">
+            {%- if final %}approved of {{ sub.requested_cents | money }}
+            {%- else %}looks covered of {{ sub.requested_cents | money }}, pending your treasurer{% endif -%}
+          </div>
+          {% elif sub.requested_cents %}
+          <div class="amount">{{ sub.requested_cents | money }}</div>
+          <div class="amount-note">requested</div>
+          {% endif %}
+        </div>
+        <div class="stamp s-{{ color }} land">{{ label }}</div>
+      </div>
+
+      <p class="slip-msg">{{ sub.member_message }}</p>
+      {% if sub.held_until %}<p class="slip-msg quiet">Payout is held until after the event on {{ ui.day(sub.held_until) }}, since clubs can't be refunded before an event happens.</p>{% endif %}
+
+      {% if lines %}
+      <ul class="slip-lines" aria-label="Line items">
+        {% for l in lines %}
+        <li class="slip-line {{ 'struck' if l.verdict == 'disallowed' }} {{ 'unclear' if l.verdict == 'unclear' }}">
+          <span class="desc">{{ l.description }}{% if l.taxable %} <span class="taxmark" title="Taxable">T</span>{% endif %}</span>
+          <span class="amt">{{ l.amount_cents | money }}</span>
+          {% if l.verdict == 'disallowed' %}
+          <span class="note">Not covered: {{ l.reason }}{% if is_treasurer %} <span class="who">({{ l.rule_id }}, by {{ l.decided_by }})</span>{% endif %}</span>
+          {% elif l.verdict == 'unclear' %}
+          <span class="note">Treasurer decides: {{ l.reason }}{% if is_treasurer %} <span class="who">({{ l.rule_id }})</span>{% endif %}</span>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% if sub.requested_cents is not none %}
+      <div class="slip-total"><span>Receipt total</span><span>{{ sub.requested_cents | money }}</span></div>
       {% endif %}
-      <div>{{ sub.member_message }}</div>
-      {% if is_treasurer and sub.recommendation %}
-        <div class="small"><b>Recommendation:</b> {{ sub.recommendation }}</div>
       {% endif %}
-      {% if sub.held_until %}<div class="small muted">Payout held until after {{ sub.held_until }} (no refunds before the event).</div>{% endif %}
-      {% if is_treasurer and sub.error %}<div class="flag"><b>Pipeline error</b>{{ sub.error }}</div>{% endif %}
     </div>
     {% endif %}
 
+    {% if is_treasurer and sub.recommendation and not working %}
+    <div class="pen-note"><strong>Recommendation:</strong> {{ sub.recommendation }}</div>
+    {% endif %}
+    {% if is_treasurer and sub.error %}
+    <div class="error-box"><strong>The receipt couldn't be read.</strong> {{ sub.error }}</div>
+    {% endif %}
+
     {% if findings and is_treasurer %}{# members see a neutral message, never fraud flags #}
-    <div class="stack">
+    <div class="flags">
       {% for f in findings %}
-      <div class="flag"><b>{{ SIGNAL_LABELS.get(f.signal, f.signal) }}{% if is_treasurer and f.points %} · {{ f.points }} pts{% endif %}</b>{{ f.detail }}</div>
+      <div class="flag"><div class="flag-title">{{ SIGNAL_LABELS.get(f.signal, f.signal) }}{% if f.points %} <span class="flag-pts">{{ f.points }} points</span>{% endif %}</div>{{ f.detail }}</div>
       {% endfor %}
     </div>
     {% endif %}
 
-    {% if lines %}
-    <div class="card scroll">
-      <table>
-        <tr><th>Item</th><th class="num">Amount</th><th>Decision</th></tr>
-        {% for l in lines %}
-        <tr class="{{ 'struck' if l.verdict == 'disallowed' }} {{ 'unclear' if l.verdict == 'unclear' }}">
-          <td class="desc"><span class="itemname">{{ l.description }}</span>{% if l.taxable %} <span class="muted small">T</span>{% endif %}
-            {% if l.verdict != 'allowed' %}<div class="reason">{{ l.reason }}{% if l.rule_id not in ('NONE',) %} · <span title="{{ rules.get(l.rule_id, '') }}">{{ l.rule_id }}</span>{% endif %}</div>{% endif %}
-          </td>
-          <td class="num">{{ l.amount_cents | money }}</td>
-          <td>
-            {% if l.verdict == 'allowed' %}<span class="badge b-green">Covered</span>
-            {% elif l.verdict == 'disallowed' %}<span class="badge b-red">Not covered</span>
-            {% else %}<span class="badge b-amber">Treasurer decides</span>{% endif %}
-            {% if is_treasurer %}<div class="reason">by {{ l.decided_by }}</div>{% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </table>
+    {% if is_treasurer and not working %}
+    <div class="panel stack auditor" id="auditor">
+      <div class="auditor-head">
+        <h2 style="margin: 0">Auditor agent</h2>
+        <span class="quiet">{{ 'Claude with read-only tools' if auditor_uses_claude else 'Rule-based (no API key)' }}</span>
+      </div>
+
+      {% if case and case.status == 'running' %}
+      <div class="working"><span class="spinner" aria-hidden="true"></span><strong>Investigating request {{ sub.id }}</strong></div>
+      <ol class="trace" id="trace">
+        {% for st in case.steps %}<li>{{ st.summary }}</li>{% endfor %}
+      </ol>
+
+      {% elif case and case.status == 'done' %}
+      <div class="case-action">
+        <span class="quiet">Suggests</span>
+        <strong class="act-{{ case.suggested_action }}">{{ ACTION_LABELS.get(case.suggested_action, case.suggested_action) }}{% if case.suggested_cents %}, {{ case.suggested_cents | money }}{% endif %}</strong>
+      </div>
+      <p class="case-summary">{{ case.summary }}</p>
+      {% if case.explanation %}<p class="case-why"><strong>Likely explanation:</strong> {{ case.explanation }}</p>{% endif %}
+      {% if case.evidence %}
+      <ul class="evidence">{% for e in case.evidence %}<li>{{ e }}</li>{% endfor %}</ul>
+      {% endif %}
+      <details>
+        <summary>How it got there ({{ case.steps | length }} steps{% if case.cost_usd %}, ${{ '%.4f' | format(case.cost_usd) }}{% endif %})</summary>
+        <ol class="trace">{% for st in case.steps %}<li>{{ st.summary }}</li>{% endfor %}</ol>
+      </details>
+      <p class="quiet" style="margin: 0; font-size: 14px">The agent can only read. You make the decision below.</p>
+      <form method="post" action="/s/{{ sub.id }}/investigate"><button class="btn btn-ghost" type="submit">Investigate again</button></form>
+
+      {% else %}
+      {% if case and case.status == 'error' %}
+      <div class="error-box"><strong>The last investigation stopped.</strong> {{ case.error }}</div>
+      {% endif %}
+      <p style="margin: 0">The agent looks up similar receipts from any club, {{ sub.member_name.split(' ')[0] }}'s past requests, the event budget and the receipt photos, then writes you a case note with a suggested action. It can't approve, reject or pay anything.</p>
+      <form method="post" action="/s/{{ sub.id }}/investigate"><button class="btn" type="submit">Investigate this request</button></form>
+      {% endif %}
     </div>
     {% endif %}
 
     {% if is_treasurer and sub.status not in ('received', 'processing', 'packeted') %}
-    <div class="card stack">
-      <b>Your decision</b>
+    <div class="panel stack">
+      <h2 style="margin: 0">Your decision</h2>
       {% if sub.status == 'error' %}
       <form method="post" action="/s/{{ sub.id }}/decide"><input type="hidden" name="action" value="retry">
-        <button class="secondary" type="submit">Retry reading the receipt</button></form>
+        <button class="btn btn-ghost" type="submit">Try reading it again</button></form>
       {% endif %}
       <form method="post" action="/s/{{ sub.id }}/decide" class="stack">
         <div>
-          <label for="note">Note to the member (needed to ask a question)</label>
-          <input id="note" type="text" name="note" maxlength="500" placeholder="optional">
+          <label class="field-label" for="note">Note to {{ sub.member_name.split(' ')[0] }} <span class="quiet">(required to ask a question)</span></label>
+          <input id="note" type="text" name="note" maxlength="500" placeholder="Can you send the itemized receipt?">
         </div>
-        <div class="actions">
+        <div class="btn-row">
           {% if sub.recommended_cents %}
-          <button type="submit" name="action" value="approve">Approve {{ sub.recommended_cents | money }}</button>
+          <button class="btn btn-ok" type="submit" name="action" value="approve">Approve {{ sub.recommended_cents | money }}</button>
           {% endif %}
-          <button type="submit" name="action" value="ask" class="secondary">Ask for info</button>
-          <button type="submit" name="action" value="reject" class="danger">Reject</button>
+          <button class="btn btn-ghost" type="submit" name="action" value="ask" id="ask-btn">Ask a question</button>
+          <button class="btn btn-danger" type="submit" name="action" value="reject">Reject</button>
         </div>
       </form>
-      <form method="post" action="/s/{{ sub.id }}/decide" class="actions">
+      <form method="post" action="/s/{{ sub.id }}/decide" class="btn-row">
         <input type="hidden" name="action" value="override">
-        <div class="grow">
-          <label for="amount">Or approve a different amount</label>
-          <input id="amount" type="text" name="amount" inputmode="decimal" placeholder="e.g. 18.60" required>
+        <div style="flex: 1; min-width: 160px">
+          <label class="field-label" for="amount">Or approve a different amount</label>
+          <input id="amount" type="text" name="amount" inputmode="decimal" placeholder="Amount in dollars" required>
         </div>
-        <button type="submit" class="secondary">Approve amount</button>
+        <button class="btn btn-ghost" type="submit">Approve this amount</button>
       </form>
     </div>
     {% endif %}
 
     {% if not is_treasurer and sub.member_id == user.id and sub.status in ('needs_info', 'error') %}
-    <form class="card stack" method="post" action="/s/{{ sub.id }}/reply" enctype="multipart/form-data">
-      <b>Reply to your treasurer</b>
-      <div><label for="rfile">New photo (optional)</label><input id="rfile" type="file" name="file" accept="image/*"></div>
-      <div><label for="rnote">Note (optional)</label><input id="rnote" type="text" name="note" maxlength="500"></div>
-      <button type="submit">Send</button>
+    <form class="panel stack" method="post" action="/s/{{ sub.id }}/reply" enctype="multipart/form-data">
+      <h2 style="margin: 0">Reply to your treasurer</h2>
+      <div><label class="field-label" for="rfile">New photo <span class="quiet">(optional)</span></label><input id="rfile" type="file" name="file" accept="image/*"></div>
+      <div><label class="field-label" for="rnote">Note <span class="quiet">(optional)</span></label><input id="rnote" type="text" name="note" maxlength="500"></div>
+      <button class="btn" type="submit">Send reply</button>
     </form>
     {% endif %}
 
     {% if is_treasurer %}
-    <details class="card">
-      <summary>Audit trail ({{ audit | length }} events{% if cost %}, AI cost ${{ '%.4f' | format(cost) }}{% endif %})</summary>
-      <div class="scroll"><table class="audit">
-        <tr><th>When</th><th>Who</th><th>What</th><th>Status</th></tr>
-        {% for a in audit %}
-        <tr><td>{{ a.created_at | when }}</td><td>{{ a.actor }}</td>
-          <td>{{ a.action }}{% if a.detail and a.action != 'pipeline decision' %}<div class="reason">{{ a.detail }}</div>{% endif %}</td>
-          <td>{{ a.to_status or '' }}</td></tr>
-        {% endfor %}
-      </table></div>
+    <details class="panel">
+      <summary>History ({{ audit | length }} events{% if cost %}, ${{ '%.4f' | format(cost) }} of Claude usage{% endif %})</summary>
+      <div class="table-wrap" style="border: 0">
+        <table>
+          <tr><th>When</th><th>Who</th><th>What happened</th><th>Status after</th></tr>
+          {% for a in audit %}
+          <tr><td>{{ a.created_at | when }}</td><td>{{ a.actor }}</td>
+            <td>{{ a.action }}{% if a.detail and a.action != 'pipeline decision' %}<div class="quiet">{{ a.detail }}</div>{% endif %}</td>
+            <td>{{ STATUS_LABELS[a.to_status][0] if a.to_status in STATUS_LABELS else (a.to_status or '') }}</td></tr>
+          {% endfor %}
+        </table>
+      </div>
     </details>
     {% endif %}
   </section>
@@ -137,7 +197,7 @@
 {% endblock %}
 {% block scripts %}
 <script>
-// Poll every 2 seconds and reload when the status changes.
+// Check every 2 seconds and reload when the status changes.
 (function () {
   const start = "{{ sub.status }}|{{ sub.updated_at }}";
   setInterval(async () => {
@@ -146,8 +206,40 @@
       if (!r.ok) return;
       const s = await r.json();
       if (`${s.status}|${s.updated_at}` !== start) location.reload();
-    } catch (e) { /* offline for a moment; try again next tick */ }
+    } catch (e) { /* briefly offline; try again on the next tick */ }
   }, 2000);
 })();
+// "Ask a question" needs the note filled in; say so right away instead of sending an empty question.
+(function () {
+  const ask = document.getElementById("ask-btn"), note = document.getElementById("note");
+  if (!ask || !note) return;
+  ask.addEventListener("click", (e) => {
+    if (note.value.trim()) return;
+    e.preventDefault();
+    note.setCustomValidity("Type your question here first.");
+    note.reportValidity();
+    note.focus();
+  });
+  note.addEventListener("input", () => note.setCustomValidity(""));
+})();
+{% if case and case.status == 'running' %}
+// While the auditor works, add each step to the trace as it happens.
+(function () {
+  const list = document.getElementById("trace");
+  setInterval(async () => {
+    try {
+      const r = await fetch("/api/s/{{ sub.id }}/case", { cache: "no-store" });
+      const c = await r.json();
+      if (c.status !== "running") { location.reload(); return; }
+      while (list.children.length < c.steps.length) {
+        const li = document.createElement("li");
+        li.textContent = c.steps[list.children.length];
+        li.className = "new";
+        list.appendChild(li);
+      }
+    } catch (e) { /* try again on the next tick */ }
+  }, 700);
+})();
+{% endif %}
 </script>
 {% endblock %}

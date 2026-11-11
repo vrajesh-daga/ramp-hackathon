@@ -1,0 +1,22 @@
+{# Small display helpers shared by the pages. #}
+{% macro day(iso) -%}
+{%- if iso and iso | length >= 10 -%}
+{%- set months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] -%}
+{{ months[(iso[5:7] | int) - 1] }} {{ iso[8:10] | int }}
+{%- else -%}{{ iso or '' }}{%- endif -%}
+{%- endmacro %}
+
+{% macro fund(code) -%}{{ 'ABSA funds' if code == 'ABSA' else 'Misc funds' }}{%- endmacro %}
+
+{% macro chip(status) -%}
+{%- set label, color = STATUS_LABELS[status] -%}
+<span class="chip c-{{ color }}">{{ label }}</span>
+{%- endmacro %}
+
+{% macro risk(score) -%}
+{%- set level = 'high' if score >= 50 else ('mid' if score >= 20 else 'low') -%}
+<div class="risk risk-{{ level }}" title="Risk score {{ score }}">
+  <div class="risk-bar"><span style="width: {{ [score, 100] | min }}%"></span></div>
+  <span class="risk-n">{{ score }}</span>
+</div>
+{%- endmacro %}

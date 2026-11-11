@@ -127,6 +127,23 @@ CREATE TABLE IF NOT EXISTS packets (
     total_cents INTEGER NOT NULL,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS case_notes (       -- the auditor agent's investigations
+    id INTEGER PRIMARY KEY,
+    submission_id INTEGER NOT NULL REFERENCES submissions(id),
+    status TEXT NOT NULL CHECK (status IN ('running', 'done', 'error')),
+    source TEXT NOT NULL,                 -- 'claude' (agent with tools) or 'rules' (no API key)
+    summary TEXT NOT NULL DEFAULT '',
+    explanation TEXT NOT NULL DEFAULT '',
+    suggested_action TEXT NOT NULL DEFAULT '',
+    suggested_cents INTEGER,
+    evidence_json TEXT NOT NULL DEFAULT '[]',
+    steps_json TEXT NOT NULL DEFAULT '[]',  -- every tool call, for the trace on the page
+    cost_usd REAL NOT NULL DEFAULT 0,
+    error TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    finished_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_case_notes_sub ON case_notes(submission_id);
 CREATE INDEX IF NOT EXISTS idx_receipts_sha ON receipts(sha256);
 CREATE INDEX IF NOT EXISTS idx_receipts_sub ON receipts(submission_id);
 CREATE INDEX IF NOT EXISTS idx_lines_sub ON line_items(submission_id);

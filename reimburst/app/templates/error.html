@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ code }} · Reimburst</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar"><div class="topbar-inner"><a class="wordmark" href="/">Reimburst</a></div></header>
+<main class="page">
+  <h1>{{ 'Page not found' if code == 404 else ("You can't open this page" if code == 403 else "That didn't work") }}</h1>
+  <p class="lede">{{ message }}</p>
+  <a class="btn" href="/">Go to your home page</a>
+</main>
+</body>
+</html>

@@ -1,44 +1,47 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
 {% set nav = 'treasurer' %}
-{% block title %}Treasurer queue · Reimburst{% endblock %}
+{% block title %}Review queue · Reimburst{% endblock %}
 {% block content %}
-<h1>Treasurer queue</h1>
-<div class="stats">
-  <div class="card stat"><div class="n">{{ stats.total }}</div><div class="l">requests</div></div>
-  <div class="card stat"><div class="n">{{ stats.auto }}</div><div class="l">auto-approved by the pipeline</div></div>
-  <div class="card stat"><div class="n">{{ stats.approved_cents | money }}</div><div class="l">approved so far</div></div>
-  <div class="card stat"><div class="n">${{ '%.2f' | format(cost.usd) }}</div><div class="l">Claude cost ({{ cost.calls }} calls)</div></div>
+<h1>Review queue</h1>
+<p class="lede">Clean receipts approve themselves. What's left is sorted by risk, riskiest first.</p>
+
+<div class="tally">
+  <div><b>{{ stats.total }}</b><span>requests so far</span></div>
+  <div><b>{{ stats.auto }}</b><span>approved with no human</span></div>
+  <div><b>{{ stats.approved_cents | money }}</b><span>approved in total</span></div>
+  <div><b>${{ '%.2f' | format(cost.usd) }}</b><span>spent on Claude ({{ cost.calls }} calls)</span></div>
 </div>
 
 {% for title, rows in sections %}
-<h2>{{ title }} <span class="muted small">({{ rows | length }})</span></h2>
-<div class="card scroll">
+{% if rows or loop.first %}
+<div class="section-head"><h2>{{ title }}</h2><span class="count">{{ rows | length }}</span></div>
+<div class="table-wrap">
   {% if rows %}
   <table>
-    <tr><th>#</th><th>Member</th><th>Event</th><th>Merchant</th><th>Status</th><th class="num">Risk</th><th class="num">Requested</th><th class="num">Payout</th></tr>
+    <tr><th>Request</th><th>Member</th><th class="hide-sm">Merchant</th><th>Status</th><th>Risk</th><th class="num">Asked for</th><th class="num">To pay</th></tr>
     {% for s in rows %}
-    {% set label, color = STATUS_LABELS[s.status] %}
-    <tr class="rowlink" onclick="location.href='/s/{{ s.id }}'">
-      <td><a href="/s/{{ s.id }}">{{ s.id }}</a></td>
+    <tr class="clickable" onclick="location.href='/s/{{ s.id }}'">
+      <td><a class="rowlink" href="/s/{{ s.id }}">{{ s.event_name }}</a><div class="quiet">Request {{ s.id }}</div></td>
       <td>{{ s.member_name }}</td>
-      <td>{{ s.event_name }}</td>
-      <td>{{ s.merchant or '—' }}</td>
-      <td><span class="badge b-{{ color }}">{{ label }}</span>{% if s.flags %} <span class="badge b-red">{{ s.flags }} flag{{ 's' if s.flags > 1 }}</span>{% endif %}</td>
-      <td class="num">{{ s.risk_score }}</td>
+      <td class="hide-sm">{{ s.merchant or 'Not read yet' }}</td>
+      <td>{{ ui.chip(s.status) }}{% if s.flags %}<div class="quiet" style="color: var(--no)">{{ s.flags }} flag{{ 's' if s.flags > 1 }}</div>{% endif %}</td>
+      <td>{{ ui.risk(s.risk_score) }}</td>
       <td class="num">{{ s.requested_cents | money }}</td>
-      <td class="num">{{ (s.approved_cents if s.approved_cents is not none else s.recommended_cents) | money }}</td>
+      <td class="num"><strong>{{ (s.approved_cents if s.approved_cents is not none else s.recommended_cents) | money }}</strong></td>
     </tr>
     {% endfor %}
   </table>
   {% else %}
-  <div class="empty">Nothing here.</div>
+  <p class="empty">Nothing needs you right now. New receipts show up here as soon as they're read.</p>
   {% endif %}
 </div>
+{% endif %}
 {% endfor %}
 {% endblock %}
 {% block scripts %}
 <script>
-// Refresh the queue when any request changes (polling stands in for live updates).
+// Reload the queue when any request changes (polling stands in for live updates).
 (function () {
   let version = null;
   async function check() {
@@ -47,7 +50,7 @@
       const { v } = await r.json();
       if (version !== null && v !== version) location.reload();
       version = v;
-    } catch (e) { /* try again next tick */ }
+    } catch (e) { /* try again on the next tick */ }
   }
   check();
   setInterval(check, 2000);

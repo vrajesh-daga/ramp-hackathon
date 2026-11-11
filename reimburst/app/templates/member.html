@@ -1,52 +1,79 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
 {% set nav = 'member' %}
 {% block title %}Submit a receipt · Reimburst{% endblock %}
 {% block content %}
-<div class="grid2">
+<div class="two-col">
   <section>
     <h1>Get paid back</h1>
-    <form class="card stack" action="/submit" method="post" enctype="multipart/form-data">
-      <div>
-        <label for="event">What was it for?</label>
-        <select id="event" name="event_id" required>
+    <p class="lede">Snap the receipt, pick the event, and you're done. Most receipts are checked in seconds.</p>
+
+    <form class="panel stack" action="/submit" method="post" enctype="multipart/form-data">
+      <fieldset>
+        <legend class="field-label">What was it for?</legend>
+        <div class="events">
           {% for e in events %}
-          <option value="{{ e.id }}">{{ e.name }} · {{ e.event_date }} · {{ e.fund }} funds</option>
+          <label class="event">
+            <input type="radio" name="event_id" value="{{ e.id }}" required {{ 'checked' if loop.first }}>
+            <span class="event-name">{{ e.name }}</span>
+            <span class="event-meta">{{ ui.day(e.event_date) }}, {{ ui.fund(e.fund) }}</span>
+          </label>
           {% endfor %}
-        </select>
-      </div>
+        </div>
+      </fieldset>
+
       <div>
-        <label for="file">Receipt photo</label>
-        <input id="file" type="file" name="file" accept="image/*" required>
-        <div class="muted small">Snap the whole receipt, flat, in good light.</div>
+        <span class="field-label" id="photo-label">Receipt photo</span>
+        <label class="dropzone" id="dropzone">
+          <input id="file" type="file" name="file" accept="image/*" required aria-labelledby="photo-label">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+          <span class="dropzone-title" id="dropzone-title">Take a photo or choose a file</span>
+          <span class="dropzone-hint" id="dropzone-hint">Lay it flat in good light, with the whole receipt in frame.</span>
+        </label>
       </div>
+
       <div>
-        <label for="note">Note (optional)</label>
-        <input id="note" type="text" name="note" maxlength="500" placeholder="e.g. snacks for the mixer">
+        <label class="field-label" for="note">Note for your treasurer <span class="quiet">(optional)</span></label>
+        <input id="note" type="text" name="note" maxlength="500" placeholder="Snacks for the mixer">
       </div>
-      <button class="wide" type="submit">Submit receipt</button>
+
+      <button class="btn btn-big" type="submit">Submit receipt</button>
     </form>
   </section>
+
   <section>
     <h1>Your requests</h1>
-    <div class="card scroll">
-      {% if subs %}
-      <table>
-        <tr><th>#</th><th>Event</th><th>Status</th><th class="num">Requested</th><th class="num">Approved</th></tr>
-        {% for s in subs %}
-        {% set label, color = STATUS_LABELS[s.status] %}
-        <tr class="rowlink" onclick="location.href='/s/{{ s.id }}'">
-          <td><a href="/s/{{ s.id }}">{{ s.id }}</a></td>
-          <td>{{ s.event_name }}</td>
-          <td><span class="badge b-{{ color }}">{{ label }}</span></td>
-          <td class="num">{{ s.requested_cents | money }}</td>
-          <td class="num">{{ s.approved_cents | money }}</td>
-        </tr>
-        {% endfor %}
-      </table>
-      {% else %}
-      <div class="empty">Nothing yet. Your submitted receipts will show up here.</div>
-      {% endif %}
-    </div>
+    <p class="lede">Tap one to see what was covered and why.</p>
+    {% if subs %}
+    <ul class="requests">
+      {% for s in subs %}
+      <li><a href="/s/{{ s.id }}">
+        <span class="req-title">{{ s.event_name }}</span>
+        <span class="req-amount">{{ (s.approved_cents if s.approved_cents is not none else s.requested_cents) | money }}</span>
+        <span class="req-sub">Request {{ s.id }}, sent {{ s.created_at | when }}</span>
+        <span>{{ ui.chip(s.status) }}</span>
+      </a></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="requests"><p class="empty">No requests yet. Submit your first receipt and it will show up here.</p></div>
+    {% endif %}
   </section>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+// Show the chosen file's name in the drop zone.
+(function () {
+  const input = document.getElementById("file");
+  const zone = document.getElementById("dropzone");
+  input.addEventListener("change", () => {
+    const f = input.files && input.files[0];
+    zone.classList.toggle("has-file", !!f);
+    document.getElementById("dropzone-title").textContent = f ? f.name : "Take a photo or choose a file";
+    document.getElementById("dropzone-hint").textContent = f ? "Ready to submit. Tap to choose a different photo." :
+      "Lay it flat in good light, with the whole receipt in frame.";
+  });
+})();
+</script>
 {% endblock %}

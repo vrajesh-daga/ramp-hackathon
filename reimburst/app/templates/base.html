@@ -3,34 +3,42 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
   <title>{% block title %}Reimburst{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<header>
-  <div class="bar">
-    <a class="logo" href="/">Reimburst</a>
-    <nav>
-      <a href="/member" class="{{ 'on' if nav == 'member' }}">Submit</a>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="wordmark" href="/">Reimburst</a>
+    <nav class="mainnav" aria-label="Main">
+      <a href="/member" {{ 'aria-current=page' if nav == 'member' }}>Submit a receipt</a>
       {% if user.role == 'treasurer' %}
-      <a href="/treasurer" class="{{ 'on' if nav == 'treasurer' }}">Treasurer queue</a>
-      <a href="/packets" class="{{ 'on' if nav == 'packets' }}">CalLink packets</a>
+      <a href="/treasurer" {{ 'aria-current=page' if nav == 'treasurer' }}>Review queue</a>
+      <a href="/packets" {{ 'aria-current=page' if nav == 'packets' }}>CalLink packets</a>
       {% endif %}
     </nav>
-    <form action="/switch" method="get">
-      <select name="uid" onchange="this.form.submit()" aria-label="Viewing as">
+    <form class="whoami" action="/switch" method="get">
+      <label for="uid">Viewing as</label>
+      <select id="uid" name="uid" onchange="this.form.submit()">
         {% for m in members %}
-        <option value="{{ m.id }}" {{ 'selected' if m.id == user.id }}>{{ m.name }} ({{ m.role }})</option>
+        <option value="{{ m.id }}" {{ 'selected' if m.id == user.id }}>{{ m.name }}{{ ', treasurer' if m.role == 'treasurer' }}</option>
         {% endfor %}
       </select>
-      <noscript><button>Switch</button></noscript>
+      <noscript><button class="btn btn-ghost">Switch</button></noscript>
     </form>
   </div>
 </header>
-{% if OFFLINE %}<div class="banner">Offline demo mode: no API calls, sample receipts only.</div>{% endif %}
-<main>
+{% if OFFLINE %}<div class="offline-note">Offline demo mode: no Claude calls, so only the files in samples/ can be read.</div>{% endif %}
+<main class="page">
+{% set error = request.query_params.get('error') %}
+{% if error %}<div class="flash-error" role="alert">{{ error }}</div>{% endif %}
 {% block content %}{% endblock %}
 </main>
+{% if error %}<script>
+// Keep the message on screen but drop it from the address, so a reload doesn't show it again.
+history.replaceState(null, "", location.pathname + location.hash);
+</script>{% endif %}
 {% block scripts %}{% endblock %}
 </body>
 </html>
