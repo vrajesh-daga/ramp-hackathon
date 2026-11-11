@@ -20,7 +20,6 @@ TOLERANCE_CENTS = 2  # printed amounts can be off by a cent of rounding
 POINTS = {
     "exact_duplicate": 100,   # the very same file was already submitted
     "same_purchase": 60,      # same merchant, date and total as an earlier receipt
-    "near_duplicate": 60,     # same items as an earlier receipt, different total
     "ai_marker": 60,          # file metadata names a generative AI tool
     "doesnt_add_up": 30,      # line items, tax and total don't reconcile
     "over_advisor_limit": 0,  # not risky, but needs advisor sign-off
@@ -220,7 +219,7 @@ def decide(ex: ReceiptExtraction, recon: Reconcile, lines: list[Line], findings:
     signals = {f.signal for f in findings}
 
     if score >= HOLD_SCORE:
-        if "exact_duplicate" in signals or "same_purchase" in signals or "near_duplicate" in signals:
+        if "exact_duplicate" in signals or "same_purchase" in signals:
             rec = "Hold: this looks like a receipt that was already submitted. Reject unless explained."
         else:
             rec = f"Hold: high risk ({score} points). Check the flags before paying."

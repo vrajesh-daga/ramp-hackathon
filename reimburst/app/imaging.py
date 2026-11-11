@@ -62,30 +62,6 @@ def prepare(original: bytes, out_path: Path) -> Image.Image:
     return img
 
 
-def dhash(img: Image.Image, size: int = 8) -> str:
-    """Difference hash: a 64-bit fingerprint of the image's brightness pattern.
-
-    Shrink to 9x8 grayscale, then record for each pixel whether it's brighter
-    than its right-hand neighbour. Two photos of the same receipt give mostly
-    the same bits even after re-compression or small shifts in lighting, so a
-    small Hamming distance between fingerprints means "probably the same picture".
-    """
-    small = img.convert("L").resize((size + 1, size), Image.LANCZOS)
-    px = list(small.getdata())
-    bits = 0
-    for row in range(size):
-        for col in range(size):
-            left = px[row * (size + 1) + col]
-            right = px[row * (size + 1) + col + 1]
-            bits = (bits << 1) | (1 if left > right else 0)
-    return f"{bits:016x}"
-
-
-def hamming(a: str, b: str) -> int:
-    """Number of differing bits between two hex fingerprints."""
-    return bin(int(a, 16) ^ int(b, 16)).count("1")
-
-
 # Byte patterns that generative tools write into metadata (EXIF, XMP, PNG text
 # chunks, or C2PA Content Credentials). "trainedAlgorithmicMedia" is the IPTC
 # standard term for "made by a generative model". A screenshot strips all of

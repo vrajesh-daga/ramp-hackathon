@@ -55,7 +55,6 @@ STATUS_LABELS = {
 SIGNAL_LABELS = {
     "exact_duplicate": "Exact duplicate",
     "same_purchase": "Same purchase twice",
-    "near_duplicate": "Edited copy of an earlier receipt",
     "ai_marker": "AI-generation marker",
     "doesnt_add_up": "Doesn't add up",
     "over_advisor_limit": "Over $2,500",

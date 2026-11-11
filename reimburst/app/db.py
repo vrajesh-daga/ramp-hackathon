@@ -66,7 +66,6 @@ CREATE TABLE IF NOT EXISTS receipts (
     original_path TEXT NOT NULL,
     processed_path TEXT,
     sha256 TEXT NOT NULL,
-    dhash TEXT,
     ai_marker TEXT NOT NULL DEFAULT '',
     merchant TEXT NOT NULL DEFAULT '',
     purchase_date TEXT NOT NULL DEFAULT '',

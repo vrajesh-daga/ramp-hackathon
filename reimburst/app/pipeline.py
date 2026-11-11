@@ -15,14 +15,13 @@ from pathlib import Path
 
 from . import ai, db
 from .config import UPLOAD_DIR
-from .imaging import ImageError, dhash, find_ai_marker, prepare, sha256_bytes
+from .imaging import ImageError, find_ai_marker, prepare, sha256_bytes
 from .policy import (POINTS, Decision, Finding, Line, Reconcile, combine, decide, fmt,
                      reconcile, rules_for_fund, rules_version, to_cents)
 from .schemas import ReceiptExtraction
 
 log = logging.getLogger("reimburst.pipeline")
 
-NEAR_DUPLICATE_OVERLAP = 0.8  # share of printed items (text + amount) that must match
 ADVISOR_LIMIT_CENTS = 250_000
 
 
@@ -30,7 +29,6 @@ ADVISOR_LIMIT_CENTS = 250_000
 class Analysis:
     original_sha: str
     processed_path: Path
-    dhash: str
     ai_marker: str
     extraction: ReceiptExtraction
     recon: Reconcile
@@ -43,8 +41,7 @@ class Analysis:
 def analyze(original: bytes, processed_path: Path, event: dict, all_rules: list[dict],
             submission_id: int | None = None) -> Analysis:
     sha = sha256_bytes(original)
-    img = prepare(original, processed_path)
-    fingerprint = dhash(img, size=16)
+    prepare(original, processed_path)
     marker = find_ai_marker(original)
 
     extraction, extract_source = ai.extract(processed_path.read_bytes(), sha, submission_id)
@@ -57,7 +54,7 @@ def analyze(original: bytes, processed_path: Path, event: dict, all_rules: list[
     if extraction.line_items:
         judgment, judge_source = ai.judge(extraction, event, rules, version, sha, submission_id)
     lines = combine(extraction, judgment, event["fund"], active_ids)
-    return Analysis(sha, processed_path, fingerprint, marker, extraction, recon, lines,
+    return Analysis(sha, processed_path, marker, extraction, recon, lines,
                     extract_source, judge_source, version)
 
 
@@ -80,47 +77,26 @@ def _norm(s: str) -> str:
     return re.sub(r"[^a-z0-9]", "", s.lower())
 
 
-def _item_keys(items) -> set[tuple[str, int]]:
-    return {(_norm(desc), cents) for desc, cents in items}
-
-
 def duplicate_findings(conn, submission_id: int, a: Analysis) -> list[Finding]:
     """Compare against every other submission's current receipt, from any club.
 
     - exact_duplicate: the identical file was uploaded before.
     - same_purchase: same merchant, date and total (catches a re-photographed receipt).
-    - near_duplicate: same merchant and mostly the same printed items, but a
-      different total or date (catches an edited copy of an earlier receipt).
-
-    We don't score pixel fingerprints: receipts all look alike at low resolution
-    (white paper, black lines), so in testing two different receipts scored as
-    more similar than two photos of the same one.
     """
     ex = a.extraction
     merchant, total = _norm(ex.merchant_name), to_cents(ex.total)
-    mine = _item_keys((li.description, to_cents(li.amount)) for li in ex.line_items)
     others = conn.execute(
         "SELECT submission_id, sha256, merchant, purchase_date, total_cents"
         " FROM receipts WHERE is_current = 1 AND submission_id != ?",
         (submission_id,),
     ).fetchall()
-    exact, same, near = [], [], []
+    exact, same = [], []
     for o in others:
         if o["sha256"] == a.original_sha:
             exact.append(o["submission_id"])
-            continue
-        if not merchant or _norm(o["merchant"]) != merchant:
-            continue
-        if ex.purchase_date and o["purchase_date"] == ex.purchase_date and o["total_cents"] == total:
+        elif (merchant and _norm(o["merchant"]) == merchant and ex.purchase_date
+              and o["purchase_date"] == ex.purchase_date and o["total_cents"] == total):
             same.append(o["submission_id"])
-            continue
-        theirs = _item_keys(
-            (r["description"], r["amount_cents"]) for r in conn.execute(
-                "SELECT description, amount_cents FROM line_items WHERE submission_id = ?",
-                (o["submission_id"],)).fetchall()
-        )
-        if mine and theirs and len(mine & theirs) / max(len(mine), len(theirs)) >= NEAR_DUPLICATE_OVERLAP:
-            near.append(o["submission_id"])
 
     refs = lambda ids: ", ".join(f"#{i}" for i in sorted(set(ids)))  # noqa: E731
     out = []
@@ -130,9 +106,6 @@ def duplicate_findings(conn, submission_id: int, a: Analysis) -> list[Finding]:
     if same:
         out.append(Finding("same_purchase", POINTS["same_purchase"],
                            f"Same merchant, date and total as {refs(same)}."))
-    if near:
-        out.append(Finding("near_duplicate", POINTS["near_duplicate"],
-                           f"Same merchant and the same items as {refs(near)}, but a different total or date."))
     return out
 
 
@@ -178,9 +151,9 @@ def _process(submission_id: int) -> None:
         decision: Decision = decide(ex, a.recon, a.lines, findings, event)
 
         conn.execute(
-            "UPDATE receipts SET processed_path = ?, dhash = ?, ai_marker = ?, merchant = ?, purchase_date = ?,"
+            "UPDATE receipts SET processed_path = ?, ai_marker = ?, merchant = ?, purchase_date = ?,"
             " total_cents = ?, card_last4 = ?, extraction_json = ? WHERE id = ?",
-            (str(processed_path), a.dhash, a.ai_marker, ex.merchant_name, ex.purchase_date,
+            (str(processed_path), a.ai_marker, ex.merchant_name, ex.purchase_date,
              to_cents(ex.total), ex.card_last4, ex.model_dump_json(), receipt["id"]),
         )
         conn.execute("DELETE FROM line_items WHERE submission_id = ?", (submission_id,))

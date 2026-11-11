@@ -55,10 +55,12 @@ upload ─► prep ─► Claude reads ─► code checks math ─► Claude + f
 
 - **Two Claude calls per receipt** (`app/ai.py`): one reads the image into a strict JSON schema, the other judges each line against the active rules. Both use structured outputs, so the reply always matches the schema. Answers are cached by file hash, so a re-upload is instant and free.
 - **Code gets the last word on money** (`app/policy.py`): the receipt's math is reconciled in integer cents, and the approvable amount is computed in code. A fixed rule backstop strikes alcohol, gift cards and personal items (and food on ABSA funds) even if the model allowed them.
-- **Fraud signals** (`app/pipeline.py`): exact duplicate (file hash), same purchase (merchant + date + total, which catches re-photos), edited copy (same items, different total), AI-tool metadata, and math that doesn't add up. Each signal is worth points. 50 or more holds the request; any flag or struck line sends it to the treasurer.
+- **Fraud signals** (`app/pipeline.py`): exact duplicate (file hash), same purchase (merchant + date + total, which catches re-photos), AI-tool metadata, and math that doesn't add up (which also catches an edited total). Each signal is worth points. 50 or more holds the request; any flag or struck line sends it to the treasurer.
 - **Members never see fraud flags.** They see a neutral "your treasurer will take a look" message. Only the treasurer can reject.
 
-## Evals (your proof slide)
+## Evals (backend experimentation, not a product feature)
+
+The app never runs or shows evals. This is a separate script for measuring how well the pipeline reads and judges receipts while you tune it.
 
 ```bash
 python evals/run_evals.py                               # real Claude calls (uses your key)
@@ -83,7 +85,7 @@ app/
   templates/     HTML pages      static/style.css   (no CDN, works offline)
 scripts/seed.py          demo club, members, events, rules
 scripts/make_samples.py  regenerates samples/ and evals/labels.json
-evals/run_evals.py       accuracy, recall, agreement and cost
+evals/run_evals.py       offline experiments: accuracy, recall, agreement and cost
 samples/                 demo receipts (fictional merchants, marked TEST DATA)
 ```
 
@@ -100,7 +102,7 @@ samples/                 demo receipts (fictional merchants, marked TEST DATA)
 ## Changes from the plan doc
 
 - **SQLite instead of Supabase.** Everything runs on one laptop, so a local file database removes setup and keeps working when the network doesn't. All SQL lives in `app/db.py` if you want to swap it out later.
-- **No pixel-based near-duplicate check.** In testing, low-resolution fingerprints rated two *different* receipts as more alike than two photos of the *same* receipt. Duplicates are caught by file hash, by same merchant + date + total, and by matching printed items instead.
+- **Two duplicate checks only: exact file hash, and same merchant + date + total.** A pixel fingerprint was tried and dropped, because low-resolution fingerprints rated two *different* receipts as more alike than two photos of the *same* receipt. An item-overlap check was dropped too, to keep the demo simple; an edited total is still caught because the math doesn't add up.
 - **Plain CSS instead of Tailwind,** so pages look right even without internet.
 - **Deferred:** real logins, payer-name matching, tax-rate and split-purchase checks, the auditor agent, and the Ramp sandbox.
 
