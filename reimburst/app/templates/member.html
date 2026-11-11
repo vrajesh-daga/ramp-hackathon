@@ -6,7 +6,7 @@
 <div class="two-col">
   <section>
     <h1>Get paid back</h1>
-    <p class="lede">Snap the receipt, pick the event, and you're done. Most receipts are checked in seconds.</p>
+    <p class="lede">Upload the receipt, pick the event, and you're done! Most receipts are checked in seconds.</p>
 
     <form class="panel stack" action="/submit" method="post" enctype="multipart/form-data">
       <fieldset>
@@ -19,6 +19,15 @@
             <span class="event-meta">{{ ui.day(e.event_date) }}, {{ ui.fund(e.fund) }}</span>
           </label>
           {% endfor %}
+          <label class="event">
+            <input type="radio" name="event_id" value="other" required {{ 'checked' if not events }}>
+            <span class="event-name">Other</span>
+            <span class="event-meta">Not tied to one of the events above</span>
+          </label>
+          <div class="other-text" id="other-wrap" hidden>
+            <label class="sr-only" for="other_text">What was it for?</label>
+            <input id="other_text" type="text" name="other_text" maxlength="60" placeholder="What was it for? e.g. Club banner">
+          </div>
         </div>
       </fieldset>
 
@@ -63,6 +72,18 @@
 {% endblock %}
 {% block scripts %}
 <script>
+// "Other" asks what the spending was for.
+(function () {
+  const wrap = document.getElementById("other-wrap"), text = document.getElementById("other_text");
+  const radios = document.querySelectorAll('input[name="event_id"]');
+  function sync() {
+    const other = document.querySelector('input[name="event_id"]:checked')?.value === "other";
+    wrap.hidden = !other; text.required = other;
+    if (other && document.activeElement && document.activeElement.name === "event_id") text.focus();
+  }
+  radios.forEach(r => r.addEventListener("change", sync));
+  sync();
+})();
 // Show the chosen file's name in the drop zone.
 (function () {
   const input = document.getElementById("file");

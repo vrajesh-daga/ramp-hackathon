@@ -81,7 +81,7 @@ def duplicate_findings(conn, submission_id: int, a: Analysis) -> list[Finding]:
     """Compare against every other submission's current receipt, from any club.
 
     - exact_duplicate: the identical file was uploaded before.
-    - same_purchase: same merchant, date and total (catches a re-photographed receipt).
+    - same_purchase: same merchant, date, and total (catches a re-photographed receipt).
     """
     ex = a.extraction
     merchant, total = _norm(ex.merchant_name), to_cents(ex.total)
@@ -105,7 +105,7 @@ def duplicate_findings(conn, submission_id: int, a: Analysis) -> list[Finding]:
                            f"This exact file was already submitted as {refs(exact)}."))
     if same:
         out.append(Finding("same_purchase", POINTS["same_purchase"],
-                           f"Same merchant, date and total as {refs(same)}."))
+                           f"Same merchant, date, and total as {refs(same)}."))
     return out
 
 
@@ -122,7 +122,7 @@ def process_submission(submission_id: int) -> None:
         with db.tx() as conn:
             if isinstance(exc, ImageError):
                 db.set_status(conn, submission_id, "needs_info", "system", "unreadable file", message,
-                              member_message=f"{message} Please upload a photo (JPEG, PNG or HEIC).",
+                              member_message=f"{message} Please upload a photo (JPEG, PNG, or HEIC).",
                               recommendation="Ask the member for a readable photo.", error="")
             else:
                 db.set_status(conn, submission_id, "error", "system", "pipeline error", message,

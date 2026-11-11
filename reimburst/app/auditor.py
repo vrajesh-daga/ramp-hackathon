@@ -11,7 +11,7 @@ Without an API key (or in offline mode), a rule-based investigator calls the
 same tools in a fixed order and writes the note from templates, so the feature
 works in every demo.
 
-The agent can only read. It never approves, rejects or moves money: the
+The agent can only read. It never approves, rejects, or moves money: the
 treasurer still decides.
 """
 from __future__ import annotations
@@ -43,7 +43,7 @@ SYSTEM = """You are an auditor helping a student club treasurer review a reimbur
 that the system flagged. Investigate with the tools, then call write_case_note exactly once.
 
 How to investigate:
-- Start with get_submission to see the request, its line items and its flags.
+- Start with get_submission to see the request, its line items, and its flags.
 - Follow the flags: for possible duplicates, use find_similar_receipts and, if a match
   turns up, view_receipt on both requests to compare the photos. Use get_member_history
   to see whether this member has a pattern, and get_event_budget if money is tight.
@@ -54,7 +54,7 @@ How to write the note:
 - Be fair and specific. Most flags are honest mistakes (a teammate claiming a shared
   purchase twice, a blurry photo). Say what the evidence shows; never call anyone a fraud.
 - Cite request numbers and dollar amounts.
-- Suggest one action: approve, approve_part, ask_member or reject. The treasurer decides."""
+- Suggest one action: approve, approve_part, ask_member, or reject. The treasurer decides."""
 
 
 # ---------- read-only tools ---------------------------------------------------------
@@ -115,7 +115,7 @@ def tool_find_similar_receipts(submission_id: int) -> tuple[str, str]:
         same_total = s["total_cents"] is not None and o["total_cents"] == s["total_cents"]
         same_card = bool(s["card_last4"]) and o["card_last4"] == s["card_last4"]
         if same_merchant and same_date and same_total:
-            why.append("same merchant, date and total")
+            why.append("same merchant, date, and total")
         elif same_merchant and same_total:
             why.append("same merchant and total, different date")
         elif same_card and same_date:
@@ -156,7 +156,7 @@ def tool_get_event_budget(event_id: int) -> tuple[str, str]:
     if e is None:
         return json.dumps({"error": f"No event {event_id}"}), f"Event {event_id} not found"
     t = db.one(
-        """SELECT COALESCE(SUM(CASE WHEN status IN ('auto_approved','approved','partially_approved','packeted')
+        """SELECT COALESCE(SUM(CASE WHEN status IN ('auto_approved','approved','partially_approved')
                                     THEN approved_cents ELSE 0 END), 0) AS approved,
                   COALESCE(SUM(CASE WHEN status = 'in_review' THEN recommended_cents ELSE 0 END), 0) AS pending
            FROM submissions WHERE event_id = ?""", (event_id,))
@@ -289,7 +289,7 @@ def _run_claude(case_id: int, sid: int) -> None:
 
     @beta_tool
     def get_member_history(member_id: int) -> str:
-        """List every request a member has made, with status, amounts and any flags.
+        """List every request a member has made, with status, amounts, and any flags.
 
         Args:
             member_id: The member's id (from get_submission).
@@ -311,7 +311,7 @@ def _run_claude(case_id: int, sid: int) -> None:
 
     @beta_tool
     def get_rule(rule_id: str) -> str:
-        """Get the full text and source of a funding rule, such as ALC-01 or ABSA-FOOD.
+        """Get the full text and source of a funding rule, such as ALC-01 or GOV-FOOD.
 
         Args:
             rule_id: The rule's id.

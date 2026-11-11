@@ -27,12 +27,12 @@ class AIError(RuntimeError):
 
 EXTRACT_SYSTEM = """You read photos of purchase receipts for a student club's reimbursement system.
 Transcribe exactly what is printed. Never guess a number you can't read; if a key
-number (a line amount, the tax or the total) is hidden by blur, folds or cropping,
+number (a line amount, the tax, or the total) is hidden by blur, folds, or cropping,
 set legible to false.
 
 Rules:
 - One line_items entry per purchased item, in printed order. Do not include
-  subtotal, tax, tip, total, payment, change or discount lines as items.
+  subtotal, tax, tip, total, payment, change, or discount lines as items.
 - amount is the line's total in dollars (after any line-level discount), as a
   positive number.
 - taxable is true when the receipt marks the line as taxable (often a "T", "TX"
@@ -40,13 +40,13 @@ Rules:
 - category is your best guess at what the item is. Use "alcohol" for beer, wine,
   spirits and hard seltzer; "gift_card" for gift or prepaid cards; "personal" for
   items for one person's own use (clothing, toiletries, a personal phone case);
-  "travel" for gas or fuel, EV charging, parking, tolls, rideshares and transit
+  "travel" for gas or fuel, EV charging, parking, tolls, rideshares, and transit
   fares. Gas or fuel is always "travel", never "personal".
 - discounts: receipt-level discounts as one positive number, 0 if none.
 - subtotal, tax, tip, total: as printed; 0 if a field isn't printed (total is
   always printed on a real receipt).
 - purchase_date as YYYY-MM-DD. If the year is two digits, assume 20xx.
-- document_type "not_a_receipt" if the image isn't a receipt, invoice or order
+- document_type "not_a_receipt" if the image isn't a receipt, invoice, or order
   confirmation at all."""
 
 JUDGE_SYSTEM = """You review line items from a student club's reimbursement request against
@@ -57,8 +57,7 @@ the club's funding rules. For each line, decide:
   clearly covers a doubtful item. A treasurer will decide those.
 
 Gas or fuel for driving to or from a club event is covered: mark it "allowed"
-with rule_id "NONE" unless one of the listed rules applies to it (for example,
-a travel rule for this event's fund).
+with rule_id "NONE" unless one of the listed rules applies to it.
 
 Only cite rules from the list. Judge the item, not the person: reasons should
 be one short, neutral sentence a student would find fair (say what the rule

@@ -29,19 +29,19 @@ CREATE TABLE IF NOT EXISTS events (
     club_id INTEGER NOT NULL REFERENCES clubs(id),
     name TEXT NOT NULL,
     event_date TEXT NOT NULL,             -- YYYY-MM-DD
-    fund TEXT NOT NULL CHECK (fund IN ('ABSA', 'MISC')),
+    fund TEXT NOT NULL CHECK (fund IN ('GOV', 'MISC')),
     budget_cents INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS policy_rules (
     rule_id TEXT PRIMARY KEY,
     text TEXT NOT NULL,
     judged_by TEXT NOT NULL CHECK (judged_by IN ('claude', 'code')),
-    funds TEXT NOT NULL CHECK (funds IN ('ALL', 'ABSA', 'MISC')),
+    funds TEXT NOT NULL CHECK (funds IN ('ALL', 'GOV', 'MISC')),
     source TEXT NOT NULL DEFAULT '',
     active INTEGER NOT NULL DEFAULT 1
 );
 CREATE TABLE IF NOT EXISTS submissions (
-    id INTEGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,  -- never reuse a number, even after a delete
     member_id INTEGER NOT NULL REFERENCES members(id),
     event_id INTEGER NOT NULL REFERENCES events(id),
     note TEXT NOT NULL DEFAULT '',
@@ -54,7 +54,6 @@ CREATE TABLE IF NOT EXISTS submissions (
     member_message TEXT NOT NULL DEFAULT '',
     treasurer_note TEXT NOT NULL DEFAULT '',
     held_until TEXT,                      -- YYYY-MM-DD, payout waits until the event happened
-    packet_id INTEGER REFERENCES packets(id),
     error TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -116,15 +115,6 @@ CREATE TABLE IF NOT EXISTS ai_calls (
     cost_usd REAL NOT NULL DEFAULT 0,
     latency_ms INTEGER NOT NULL DEFAULT 0,
     source TEXT NOT NULL,                 -- 'api', 'cache' or 'offline'
-    created_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS packets (
-    id INTEGER PRIMARY KEY,
-    club_id INTEGER NOT NULL REFERENCES clubs(id),
-    pdf_path TEXT NOT NULL,
-    item_count INTEGER NOT NULL,
-    request_count INTEGER NOT NULL,
-    total_cents INTEGER NOT NULL,
     created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS case_notes (       -- the auditor agent's investigations

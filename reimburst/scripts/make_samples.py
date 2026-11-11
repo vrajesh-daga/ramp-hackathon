@@ -199,7 +199,7 @@ def main() -> None:
         {"file": "samples/2_grocery_with_wine.jpg", "fund": "MISC", "merchant": "Bear Market Grocery",
          "purchase_date": "2026-10-30", "total": 38.40, "expected_status": "in_review",
          "expected_approved": 18.60, "disallowed_keywords": ["CAB SAUV"]},
-        {"file": "samples/2_grocery_with_wine.jpg", "fund": "ABSA", "merchant": "Bear Market Grocery",
+        {"file": "samples/2_grocery_with_wine.jpg", "fund": "GOV", "merchant": "Bear Market Grocery",
          "purchase_date": "2026-10-30", "total": 38.40, "expected_status": "in_review",
          "expected_approved": 6.60, "disallowed_keywords": ["CAB SAUV", "TORTILLA"]},
         {"file": "samples/4_edited_total_TEST.jpg", "fund": "MISC", "merchant": "Southside Snacks",

@@ -19,9 +19,9 @@ TOLERANCE_CENTS = 2  # printed amounts can be off by a cent of rounding
 # receipts; what matters is that every flag carries a reason a treasurer can read.
 POINTS = {
     "exact_duplicate": 100,   # the very same file was already submitted
-    "same_purchase": 60,      # same merchant, date and total as an earlier receipt
+    "same_purchase": 60,      # same merchant, date, and total as an earlier receipt
     "ai_marker": 60,          # file metadata names a generative AI tool
-    "doesnt_add_up": 30,      # line items, tax and total don't reconcile
+    "doesnt_add_up": 30,      # line items, tax, and total don't reconcile
     "over_advisor_limit": 0,  # not risky, but needs advisor sign-off
 }
 HOLD_SCORE = 50    # at or above: held with a warning banner
@@ -66,10 +66,8 @@ def backstop(category: str, fund: str, active_ids: set[str]) -> tuple[str, str, 
         return "disallowed", "GIFT-01", "Gift cards aren't covered."
     if category == "personal" and "PERSONAL-01" in active_ids:
         return "disallowed", "PERSONAL-01", "Personal items aren't covered."
-    if fund == "ABSA" and category in ("food", "nonalcoholic_drink") and "ABSA-FOOD" in active_ids:
-        return "disallowed", "ABSA-FOOD", "ABSA funds can't pay for food or drinks."
-    if fund == "ABSA" and category == "travel" and "ABSA-TRAVEL" in active_ids:
-        return "unclear", "ABSA-TRAVEL", "ABSA funds can't pay for travel outside the Bay Area; check where this trip went."
+    if fund == "GOV" and category in ("food", "nonalcoholic_drink") and "GOV-FOOD" in active_ids:
+        return "disallowed", "GOV-FOOD", "Student government funds can't pay for food or drinks."
     return None
 
 

@@ -1,5 +1,5 @@
 """Reimburst web app: one FastAPI server for the member pages, the treasurer
-queue, the packet builder and the background pipeline.
+queue and the background pipeline.
 
 Run:  uvicorn app.main:app --host 0.0.0.0 --port 8000
 """
@@ -23,7 +23,6 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from . import auditor, db
 from .config import MAX_UPLOAD_BYTES, MODEL, OFFLINE, UPLOAD_DIR
 from .imaging import sha256_bytes
-from .packets import build_packet, ready_for_packet
 from .pipeline import process_submission
 from .policy import fmt
 
@@ -51,7 +50,6 @@ STATUS_LABELS = {
     "approved": ("Approved", "green"),
     "partially_approved": ("Partly approved", "green"),
     "rejected": ("Rejected", "red"),
-    "packeted": ("In CalLink packet", "purple"),
     "error": ("Error", "red"),
 }
 SIGNAL_LABELS = {
@@ -97,8 +95,10 @@ async def friendly_errors(request: Request, exc: StarletteHTTPException):
 
 templates.env.filters["money"] = fmt
 templates.env.filters["when"] = _when
+# Stylesheet version: changes whenever style.css does, so browsers never show a stale copy.
+ASSET_V = str(int((APP_DIR / "static" / "style.css").stat().st_mtime))
 templates.env.globals.update(STATUS_LABELS=STATUS_LABELS, SIGNAL_LABELS=SIGNAL_LABELS,
-                             OFFLINE=OFFLINE, MODEL=MODEL)
+                             OFFLINE=OFFLINE, MODEL=MODEL, ASSET_V=ASSET_V)
 
 
 # ---------- helpers --------------------------------------------------------------------
@@ -182,7 +182,7 @@ def switch(uid: int):
 def member_home(request: Request):
     user = current_user(request)
     events = db.all_rows(  # past events first (most recent on top), upcoming after
-        "SELECT * FROM events WHERE club_id = ?"
+        "SELECT * FROM events WHERE club_id = ? AND name <> 'Other' AND name NOT LIKE 'Other: %'"
         " ORDER BY event_date > date('now', 'localtime'), event_date DESC", (user["club_id"],))
     subs = db.all_rows(
         """SELECT s.*, e.name AS event_name FROM submissions s JOIN events e ON e.id = s.event_id
@@ -192,13 +192,36 @@ def member_home(request: Request):
     return render(request, "member.html", events=events, subs=subs)
 
 
+OTHER_EVENT = "Other"
+
+
+def other_event(club_id: int, what: str):
+    """An 'Other: <what it was for>' event for spending that isn't tied to a listed event (created on first use)."""
+    name = f"{OTHER_EVENT}: {what}"
+    row = db.one("SELECT * FROM events WHERE club_id = ? AND name = ?", (club_id, name))
+    if row is None:
+        with db.tx() as conn:
+            conn.execute("INSERT INTO events (club_id, name, event_date, fund) VALUES (?, ?, date('now', 'localtime'), 'MISC')",
+                         (club_id, name))
+        row = db.one("SELECT * FROM events WHERE club_id = ? AND name = ?", (club_id, name))
+    return row
+
+
 @app.post("/submit")
-async def submit(request: Request, background: BackgroundTasks, event_id: int = Form(...),
-                 note: str = Form(""), file: UploadFile = File(...)):
+async def submit(request: Request, background: BackgroundTasks, event_id: str = Form(...),
+                 note: str = Form(""), other_text: str = Form(""), file: UploadFile = File(...)):
     user = current_user(request)
-    event = db.one("SELECT * FROM events WHERE id = ? AND club_id = ?", (event_id, user["club_id"]))
+    if event_id == "other":
+        what = " ".join(other_text.split())[:60]
+        if not what:
+            raise HTTPException(400, "Tell us what it was for.")
+        event = other_event(user["club_id"], what)
+    else:
+        event = db.one("SELECT * FROM events WHERE id = ? AND club_id = ?",
+                       (event_id if event_id.isdigit() else -1, user["club_id"]))
     if event is None:
-        raise HTTPException(400, "Pick one of your club's events.")
+        raise HTTPException(400, "Pick one of your club's events, or choose Other.")
+    event_id = event["id"]
     path, data = await save_upload(file)
     with db.tx() as conn:
         now = db.now_iso()
@@ -224,7 +247,6 @@ def submission_page(request: Request, sid: int):
     lines = db.all_rows("SELECT * FROM line_items WHERE submission_id = ? ORDER BY idx", (sid,))
     findings = db.all_rows("SELECT * FROM findings WHERE submission_id = ? ORDER BY points DESC", (sid,))
     audit = db.all_rows("SELECT * FROM audit_log WHERE submission_id = ? ORDER BY id", (sid,))
-    cost = db.one("SELECT COALESCE(SUM(cost_usd), 0) AS usd FROM ai_calls WHERE submission_id = ?", (sid,))["usd"]
     extraction = None
     if receipt and receipt["extraction_json"]:
         extraction = json.loads(receipt["extraction_json"])
@@ -236,7 +258,7 @@ def submission_page(request: Request, sid: int):
             case["steps"] = json.loads(case["steps_json"])
             case["evidence"] = json.loads(case["evidence_json"])
     return render(request, "submission.html", sub=sub, receipt=receipt, lines=lines, findings=findings,
-                  audit=audit, cost=cost, extraction=extraction, rules=rules, case=case,
+                  audit=audit, extraction=extraction, rules=rules, case=case,
                   working=sub["status"] in WORKING, auditor_uses_claude=auditor.use_claude(),
                   ACTION_LABELS=auditor.ACTION_LABELS)
 
@@ -315,7 +337,7 @@ def treasurer_decide(request: Request, sid: int, background: BackgroundTasks, ac
     if user["role"] != "treasurer":
         raise HTTPException(403, "Only the treasurer can decide.")
     sub = load_submission(sid)
-    if sub["status"] in WORKING or sub["status"] == "packeted":
+    if sub["status"] in WORKING:
         raise HTTPException(400, "This request can't be changed right now.")
     note = note.strip()[:500]
     requested = sub["requested_cents"] or 0
@@ -350,10 +372,47 @@ def treasurer_decide(request: Request, sid: int, background: BackgroundTasks, ac
     return RedirectResponse(f"/s/{sid}", status_code=303)
 
 
+@app.post("/s/{sid}/delete")
+def delete_submission(request: Request, sid: int):
+    """Treasurer only: remove a request, its rows, and its photos for good.
+
+    One audit_log row (with no submission attached) records who deleted what,
+    so a deletion still leaves a trace. Claude usage stays in ai_calls, unlinked,
+    so the cost total still counts money that was really spent.
+    """
+    user = current_user(request)
+    if user["role"] != "treasurer":
+        raise HTTPException(403, "Only the treasurer can delete requests.")
+    sub = load_submission(sid)
+    if sub["club_id"] != user["club_id"]:
+        raise HTTPException(403, "This request belongs to another club.")
+    if sub["status"] in WORKING:
+        raise HTTPException(400, "Wait until the receipt has been read, then delete it.")
+    if db.one("SELECT id FROM case_notes WHERE submission_id = ? AND status = 'running'", (sid,)):
+        raise HTTPException(400, "A check is still running on this request. Delete it when it's done.")
+
+    receipts = db.all_rows("SELECT original_path, processed_path FROM receipts WHERE submission_id = ?", (sid,))
+    with db.tx() as conn:
+        for table in ("line_items", "findings", "case_notes", "receipts", "audit_log"):
+            conn.execute(f"DELETE FROM {table} WHERE submission_id = ?", (sid,))
+        conn.execute("UPDATE ai_calls SET submission_id = NULL WHERE submission_id = ?", (sid,))
+        conn.execute("DELETE FROM submissions WHERE id = ?", (sid,))
+        amount = fmt(sub["requested_cents"]) if sub["requested_cents"] is not None else "no amount read"
+        db.audit(conn, None, user["name"], f"deleted request {sid}", sub["status"], None,
+                 f"{sub['member_name']}, {sub['event_name']}, {amount}")
+
+    uploads = UPLOAD_DIR.resolve()
+    for r in receipts:  # only ever remove files inside the upload folder
+        for p in (r["original_path"], r["processed_path"]):
+            if p and Path(p).resolve().parent == uploads:
+                Path(p).unlink(missing_ok=True)
+    return RedirectResponse(f"/treasurer?notice=Request+{sid}+deleted.", status_code=303)
+
+
 @app.get("/treasurer")
 def treasurer(request: Request):
     user = current_user(request)
-    if user["role"] != "treasurer":  # members never see the queue, flags or other people's amounts
+    if user["role"] != "treasurer":  # members never see the queue, flags, or other people's amounts
         return RedirectResponse("/member", status_code=303)
     base = """SELECT s.*, m.name AS member_name, e.name AS event_name, r.merchant,
                      (SELECT COUNT(*) FROM findings f WHERE f.submission_id = s.id AND f.points > 0) AS flags
@@ -366,55 +425,20 @@ def treasurer(request: Request):
                                           " ORDER BY s.risk_score DESC, s.id", cid)),
         ("Reading now", db.all_rows(base + " AND s.status IN ('received', 'processing') ORDER BY s.id", cid)),
         ("Waiting on the member", db.all_rows(base + " AND s.status = 'needs_info' ORDER BY s.id", cid)),
-        ("Approved, not yet filed", db.all_rows(base + " AND s.status IN ('auto_approved', 'approved',"
-                                                " 'partially_approved') ORDER BY s.id DESC", cid)),
-        ("Done", db.all_rows(base + " AND s.status IN ('packeted', 'rejected') ORDER BY s.updated_at DESC LIMIT 25", cid)),
+        ("Approved", db.all_rows(base + " AND s.status IN ('auto_approved', 'approved',"
+                                 " 'partially_approved') ORDER BY s.id DESC", cid)),
+        ("Rejected", db.all_rows(base + " AND s.status = 'rejected' ORDER BY s.updated_at DESC LIMIT 25", cid)),
     ]
     stats = db.one(
         """SELECT COUNT(*) AS total,
-                  COALESCE(SUM(CASE WHEN s.status IN ('auto_approved','approved','partially_approved','packeted')
+                  COALESCE(SUM(CASE WHEN s.status IN ('auto_approved','approved','partially_approved')
                        THEN s.approved_cents ELSE 0 END), 0) AS approved_cents
            FROM submissions s JOIN members m ON m.id = s.member_id WHERE m.club_id = ?""", cid)
     stats["auto"] = db.one(
         """SELECT COUNT(DISTINCT a.submission_id) AS n FROM audit_log a
            JOIN submissions s ON s.id = a.submission_id JOIN members m ON m.id = s.member_id
            WHERE m.club_id = ? AND a.action = 'pipeline decision' AND a.to_status = 'auto_approved'""", cid)["n"]
-    cost = db.one("SELECT COALESCE(SUM(cost_usd), 0) AS usd, COUNT(*) AS calls FROM ai_calls WHERE source = 'api'")
-    return render(request, "treasurer.html", sections=sections, stats=stats, cost=cost)
-
-
-@app.get("/packets")
-def packets_page(request: Request):
-    user = current_user(request)
-    if user["role"] != "treasurer":  # members never see the queue, flags or other people's amounts
-        return RedirectResponse("/member", status_code=303)
-    ready = ready_for_packet(user["club_id"])
-    held = db.all_rows(
-        """SELECT s.id, s.held_until, s.approved_cents, m.name AS member_name FROM submissions s
-           JOIN members m ON m.id = s.member_id
-           WHERE m.club_id = ? AND s.status IN ('auto_approved','approved','partially_approved')
-             AND s.packet_id IS NULL AND s.held_until > date('now', 'localtime') ORDER BY s.held_until""",
-        (user["club_id"],),
-    )
-    packets = db.all_rows("SELECT * FROM packets WHERE club_id = ? ORDER BY id DESC", (user["club_id"],))
-    return render(request, "packets.html", ready=ready, held=held, packets=packets)
-
-
-@app.post("/packets/build")
-def packets_build(request: Request):
-    user = current_user(request)
-    if user["role"] != "treasurer":
-        raise HTTPException(403, "Only the treasurer can build packets.")
-    build_packet(user["club_id"], user["name"])
-    return RedirectResponse("/packets", status_code=303)
-
-
-@app.get("/packets/{pid}/download")
-def packet_download(pid: int):
-    p = db.one("SELECT * FROM packets WHERE id = ?", (pid,))
-    if p is None or not Path(p["pdf_path"]).exists():
-        raise HTTPException(404)
-    return FileResponse(p["pdf_path"], media_type="application/pdf", filename=f"callink_packet_{pid}.pdf")
+    return render(request, "treasurer.html", sections=sections, stats=stats)
 
 
 # ---------- tiny JSON endpoints for polling ------------------------------------------------

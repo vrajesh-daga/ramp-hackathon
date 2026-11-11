@@ -4,13 +4,11 @@
 {% block title %}Review queue · Reimburst{% endblock %}
 {% block content %}
 <h1>Review queue</h1>
-<p class="lede">Clean receipts approve themselves. What's left is sorted by risk, riskiest first.</p>
 
 <div class="tally">
   <div><b>{{ stats.total }}</b><span>requests so far</span></div>
   <div><b>{{ stats.auto }}</b><span>approved with no human</span></div>
   <div><b>{{ stats.approved_cents | money }}</b><span>approved in total</span></div>
-  <div><b>${{ '%.2f' | format(cost.usd) }}</b><span>spent on Claude ({{ cost.calls }} calls)</span></div>
 </div>
 
 {% for title, rows in sections %}
@@ -25,7 +23,7 @@
       <td><a class="rowlink" href="/s/{{ s.id }}">{{ s.event_name }}</a><div class="quiet">Request {{ s.id }}</div></td>
       <td>{{ s.member_name }}</td>
       <td class="hide-sm">{{ s.merchant or 'Not read yet' }}</td>
-      <td>{{ ui.chip(s.status) }}{% if s.flags %}<div class="quiet" style="color: var(--no)">{{ s.flags }} flag{{ 's' if s.flags > 1 }}</div>{% endif %}</td>
+      <td>{{ ui.chip(s.status) }}{% if s.flags %}<div class="quiet" style="color: var(--red)">{{ s.flags }} flag{{ 's' if s.flags > 1 }}</div>{% endif %}</td>
       <td>{{ ui.risk(s.risk_score) }}</td>
       <td class="num">{{ s.requested_cents | money }}</td>
       <td class="num"><strong>{{ (s.approved_cents if s.approved_cents is not none else s.recommended_cents) | money }}</strong></td>

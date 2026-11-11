@@ -121,7 +121,7 @@ EXTRACTION_SCHEMA = _obj({
     "tax": {"type": "number", "description": "Total tax, 0 if none"},
     "tip": {"type": "number", "description": "Tip or gratuity, 0 if none"},
     "total": {"type": "number", "description": "Printed grand total"},
-    "legible": {"type": "boolean", "description": "False if blur, folds or cropping hide a key number"},
+    "legible": {"type": "boolean", "description": "False if blur, folds, or cropping hide a key number"},
 })
 
 

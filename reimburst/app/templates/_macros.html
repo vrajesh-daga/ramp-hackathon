@@ -6,7 +6,7 @@
 {%- else -%}{{ iso or '' }}{%- endif -%}
 {%- endmacro %}
 
-{% macro fund(code) -%}{{ 'ABSA funds' if code == 'ABSA' else 'Misc funds' }}{%- endmacro %}
+{% macro fund(code) -%}{{ 'Student government funds' if code == 'GOV' else 'Miscellaneous club funds' }}{%- endmacro %}
 
 {% macro chip(status) -%}
 {%- set label, color = STATUS_LABELS[status] -%}
@@ -14,9 +14,7 @@
 {%- endmacro %}
 
 {% macro risk(score) -%}
-{%- set level = 'high' if score >= 50 else ('mid' if score >= 20 else 'low') -%}
-<div class="risk risk-{{ level }}" title="Risk score {{ score }}">
-  <div class="risk-bar"><span style="width: {{ [score, 100] | min }}%"></span></div>
-  <span class="risk-n">{{ score }}</span>
-</div>
+{%- if score >= 50 %}<span class="chip c-red">High</span>
+{%- elif score >= 20 %}<span class="chip c-amber">Medium</span>
+{%- else %}<span class="chip">Low</span>{% endif -%}
 {%- endmacro %}

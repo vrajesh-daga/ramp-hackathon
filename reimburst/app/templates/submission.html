@@ -3,7 +3,7 @@
 {% set nav = 'treasurer' if user.role == 'treasurer' else 'member' %}
 {% set label, color = STATUS_LABELS[sub.status] %}
 {% set is_treasurer = user.role == 'treasurer' %}
-{% set final = sub.status in ('approved', 'partially_approved', 'auto_approved', 'packeted') %}
+{% set final = sub.status in ('approved', 'partially_approved', 'auto_approved') %}
 {% set shown_cents = sub.approved_cents if final else (sub.recommended_cents if sub.status == 'in_review' else none) %}
 {% block title %}Request {{ sub.id }} · Reimburst{% endblock %}
 {% block content %}
@@ -48,15 +48,29 @@
           <div class="amount">{{ shown_cents | money }}</div>
           <div class="amount-note">
             {%- if final %}approved of {{ sub.requested_cents | money }}
-            {%- else %}looks covered of {{ sub.requested_cents | money }}, pending your treasurer{% endif -%}
+            {%- else %}looks covered of {{ sub.requested_cents | money }}, <strong>pending your treasurer</strong>{% endif -%}
           </div>
           {% elif sub.requested_cents %}
           <div class="amount">{{ sub.requested_cents | money }}</div>
           <div class="amount-note">requested</div>
           {% endif %}
         </div>
-        <div class="stamp s-{{ color }} land">{{ label }}</div>
+        <div class="stamp s-{{ color }}">{{ label }}</div>
       </div>
+
+      {% if shown_cents is not none and sub.requested_cents %}
+      {% set req = sub.requested_cents %}{% set yes = [shown_cents, req] | min %}{% set no = req - yes %}
+      <div class="cover" aria-label="{{ yes | money }} covered of {{ req | money }}">
+        <div class="cover-bar">
+          {% if yes %}<span class="yes" style="flex: {{ yes }}"></span>{% endif %}
+          {% if no %}<span class="no" style="flex: {{ no }}"></span>{% endif %}
+        </div>
+        <div class="cover-legend">
+          <span><i class="dot" style="background: var(--green)"></i>Covered <b>{{ yes | money }}</b></span>
+          {% if no %}<span><i class="dot" style="background: var(--red)"></i>Not covered <b>{{ no | money }}</b></span>{% endif %}
+        </div>
+      </div>
+      {% endif %}
 
       <p class="slip-msg">{{ sub.member_message }}</p>
       {% if sub.held_until %}<p class="slip-msg quiet">Payout is held until after the event on {{ ui.day(sub.held_until) }}, since clubs can't be refunded before an event happens.</p>{% endif %}
@@ -83,7 +97,7 @@
     {% endif %}
 
     {% if is_treasurer and sub.recommendation and not working %}
-    <div class="pen-note"><strong>Recommendation:</strong> {{ sub.recommendation }}</div>
+    <div class="pen-note{{ ' hold' if sub.recommendation.startswith('Hold') }}"><strong>Recommendation:</strong> {{ sub.recommendation }}</div>
     {% endif %}
     {% if is_treasurer and sub.error %}
     <div class="error-box"><strong>The receipt couldn't be read.</strong> {{ sub.error }}</div>
@@ -92,7 +106,7 @@
     {% if findings and is_treasurer %}{# members see a neutral message, never fraud flags #}
     <div class="flags">
       {% for f in findings %}
-      <div class="flag"><div class="flag-title">{{ SIGNAL_LABELS.get(f.signal, f.signal) }}{% if f.points %} <span class="flag-pts">{{ f.points }} points</span>{% endif %}</div>{{ f.detail }}</div>
+      <div class="flag"><div class="flag-title">{{ SIGNAL_LABELS.get(f.signal, f.signal) }}</div>{{ f.detail }}</div>
       {% endfor %}
     </div>
     {% endif %}
@@ -100,12 +114,12 @@
     {% if is_treasurer and not working %}
     <div class="panel stack auditor" id="auditor">
       <div class="auditor-head">
-        <h2 style="margin: 0">Auditor agent</h2>
-        <span class="quiet">{{ 'Claude with read-only tools' if auditor_uses_claude else 'Rule-based (no API key)' }}</span>
+        <h2 style="margin: 0">Get a second opinion</h2>
+        {% if not auditor_uses_claude %}<span class="quiet">Basic checks (no API key)</span>{% endif %}
       </div>
 
       {% if case and case.status == 'running' %}
-      <div class="working"><span class="spinner" aria-hidden="true"></span><strong>Investigating request {{ sub.id }}</strong></div>
+      <div class="working"><span class="spinner" aria-hidden="true"></span><strong>Checking request {{ sub.id }}</strong></div>
       <ol class="trace" id="trace">
         {% for st in case.steps %}<li>{{ st.summary }}</li>{% endfor %}
       </ol>
@@ -121,23 +135,23 @@
       <ul class="evidence">{% for e in case.evidence %}<li>{{ e }}</li>{% endfor %}</ul>
       {% endif %}
       <details>
-        <summary>How it got there ({{ case.steps | length }} steps{% if case.cost_usd %}, ${{ '%.4f' | format(case.cost_usd) }}{% endif %})</summary>
+        <summary>How it got there ({{ case.steps | length }} steps)</summary>
         <ol class="trace">{% for st in case.steps %}<li>{{ st.summary }}</li>{% endfor %}</ol>
       </details>
-      <p class="quiet" style="margin: 0; font-size: 14px">The agent can only read. You make the decision below.</p>
-      <form method="post" action="/s/{{ sub.id }}/investigate"><button class="btn btn-ghost" type="submit">Investigate again</button></form>
+      <p class="quiet" style="margin: 0; font-size: 14px">This is advice only. You make the decision below.</p>
+      <form method="post" action="/s/{{ sub.id }}/investigate"><button class="btn btn-ghost" type="submit">Check again</button></form>
 
       {% else %}
       {% if case and case.status == 'error' %}
-      <div class="error-box"><strong>The last investigation stopped.</strong> {{ case.error }}</div>
+      <div class="error-box"><strong>The last check stopped.</strong> {{ case.error }}</div>
       {% endif %}
-      <p style="margin: 0">The agent looks up similar receipts from any club, {{ sub.member_name.split(' ')[0] }}'s past requests, the event budget and the receipt photos, then writes you a case note with a suggested action. It can't approve, reject or pay anything.</p>
-      <form method="post" action="/s/{{ sub.id }}/investigate"><button class="btn" type="submit">Investigate this request</button></form>
+      <p style="margin: 0">Compare this request with similar receipts, {{ sub.member_name.split(' ')[0] }}'s earlier requests, and the event budget. You'll get a short note on what to do. It never approves, rejects, or pays anything for you.</p>
+      <form method="post" action="/s/{{ sub.id }}/investigate"><button class="btn" type="submit">Check this request</button></form>
       {% endif %}
     </div>
     {% endif %}
 
-    {% if is_treasurer and sub.status not in ('received', 'processing', 'packeted') %}
+    {% if is_treasurer and sub.status not in ('received', 'processing') %}
     <div class="panel stack">
       <h2 style="margin: 0">Your decision</h2>
       {% if sub.status == 'error' %}
@@ -146,7 +160,7 @@
       {% endif %}
       <form method="post" action="/s/{{ sub.id }}/decide" class="stack">
         <div>
-          <label class="field-label" for="note">Note to {{ sub.member_name.split(' ')[0] }} <span class="quiet">(required to ask a question)</span></label>
+          <label class="field-label" for="note">Note to {{ sub.member_name.split(' ')[0] }} <span class="quiet">(needed if you ask a question)</span></label>
           <input id="note" type="text" name="note" maxlength="500" placeholder="Can you send the itemized receipt?">
         </div>
         <div class="btn-row">
@@ -177,9 +191,18 @@
     </form>
     {% endif %}
 
+    {% if is_treasurer and sub.status not in ('received', 'processing') and not (case and case.status == 'running') %}
+    <form class="panel stack" method="post" action="/s/{{ sub.id }}/delete"
+          onsubmit="return confirm('Delete request {{ sub.id }} from {{ sub.member_name }}? Its photo and history are removed for good.');">
+      <h2 style="margin: 0">Delete this request</h2>
+      <p class="quiet" style="margin: 0">The photo, line items, flags, and history are removed and can't be recovered. A record that you deleted it stays in the audit log.</p>
+      <div><button class="btn btn-danger" type="submit">Delete request {{ sub.id }}</button></div>
+    </form>
+    {% endif %}
+
     {% if is_treasurer %}
     <details class="panel">
-      <summary>History ({{ audit | length }} events{% if cost %}, ${{ '%.4f' | format(cost) }} of Claude usage{% endif %})</summary>
+      <summary>History ({{ audit | length }} events)</summary>
       <div class="table-wrap" style="border: 0">
         <table>
           <tr><th>When</th><th>Who</th><th>What happened</th><th>Status after</th></tr>
@@ -203,6 +226,7 @@
   setInterval(async () => {
     try {
       const r = await fetch("/api/s/{{ sub.id }}", { cache: "no-store" });
+      if (r.status === 404) { location.href = "{{ '/treasurer' if is_treasurer else '/member' }}"; return; }
       if (!r.ok) return;
       const s = await r.json();
       if (`${s.status}|${s.updated_at}` !== start) location.reload();

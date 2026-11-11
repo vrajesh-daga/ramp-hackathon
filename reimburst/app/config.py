@@ -15,10 +15,9 @@ DATA_DIR = ROOT / "data"
 DB_PATH = Path(os.getenv("REIMBURST_DB", str(DATA_DIR / "reimburst.db")))
 UPLOAD_DIR = DATA_DIR / "uploads"
 CACHE_DIR = DATA_DIR / "cache"
-PACKET_DIR = DATA_DIR / "packets"
 SAMPLES_DIR = ROOT / "samples"
 
-for _d in (DATA_DIR, UPLOAD_DIR, CACHE_DIR, PACKET_DIR):
+for _d in (DATA_DIR, UPLOAD_DIR, CACHE_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "").strip()
